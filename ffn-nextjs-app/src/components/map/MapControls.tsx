@@ -8,15 +8,23 @@ import { toast } from 'react-hot-toast'
 
 interface MapControlsProps {
   onClearArea?: () => void
+  onClearAnalysis?: () => void
 }
 
-export function MapControls({ onClearArea }: MapControlsProps) {
+export function MapControls({ onClearArea, onClearAnalysis }: MapControlsProps) {
   const { drawnPolygon } = useMapStore()
 
   const handleClearArea = () => {
     if (onClearArea) {
       onClearArea()
       toast.success('Area cleared! You can now draw a new area.')
+    }
+  }
+
+  const handleClearAnalysis = () => {
+    if (onClearAnalysis) {
+      onClearAnalysis()
+      toast.success('All analysis results cleared!')
     }
   }
 
@@ -39,9 +47,9 @@ export function MapControls({ onClearArea }: MapControlsProps) {
             )}
           </div>
 
-          {/* Clear Area Button */}
-          {drawnPolygon && (
-            <div className="flex items-center justify-center">
+          {/* Clear Analysis Button */}
+          <div className="flex items-center justify-center space-x-2">
+            {drawnPolygon && (
               <Button
                 variant="outline"
                 size="sm"
@@ -51,8 +59,17 @@ export function MapControls({ onClearArea }: MapControlsProps) {
                 <Trash2 className="h-4 w-4 mr-1" />
                 Clear Area
               </Button>
-            </div>
-          )}
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAnalysis}
+              title="Clear all analysis results and selections"
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Clear Analysis
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -50,7 +50,8 @@ export function SoilAnalysis() {
     setSelectedSoilLayer,
     setSelectedSoilDepth,
     setSoilImageOverlay,
-    setFarmlandGeoJSON
+    setFarmlandGeoJSON,
+    clearTrigger
   } = useMapStore()
 
   const [results, setResults] = useState<any>(null)
@@ -60,6 +61,22 @@ export function SoilAnalysis() {
   const [analysisType, setAnalysisType] = useState<'polygon' | 'farmland' | null>(null)
   const [customDepthRange, setCustomDepthRange] = useState<[number, number]>([0, 30])
   const [isCustomDepth, setIsCustomDepth] = useState(false)
+
+  // Clear state when clearTrigger changes
+  useEffect(() => {
+    if (clearTrigger > 0) {
+      setResults(null)
+      setFarmlandResults(null)
+      setLegendData(null)
+      setAnalysisType(null)
+      setSoilImageUrl(prevUrl => {
+        if (prevUrl) {
+          URL.revokeObjectURL(prevUrl)
+        }
+        return null
+      })
+    }
+  }, [clearTrigger])
 
   // Handle custom depth range changes with validation
   const handleCustomDepthChange = (values: number[]) => {
@@ -262,9 +279,11 @@ export function SoilAnalysis() {
 
     // Custom depth validation is handled by the slider constraints
 
-    // Clear previous results first
+    // Clear previous results first (both polygon and farmland)
     setResults(null)
+    setFarmlandResults(null)
     setLegendData(null)
+    setAnalysisType(null)
     // Clean up previous image URL to prevent memory leaks
     if (soilImageUrl) {
       URL.revokeObjectURL(soilImageUrl)
@@ -277,6 +296,9 @@ export function SoilAnalysis() {
       geometry: drawnPolygon
     }
 
+    // Clear any farmland overlay when doing polygon analysis
+    setFarmlandGeoJSON(null)
+    
     soilAnalysisMutation.mutate(params)
     soilImageMutation.mutate(params)
   }
@@ -289,7 +311,7 @@ export function SoilAnalysis() {
 
     // Custom depth validation is handled by the slider constraints
 
-    // Clear previous results first
+    // Clear previous results first (both polygon and farmland)
     setResults(null)
     setFarmlandResults(null)
     setLegendData(null)
@@ -305,6 +327,9 @@ export function SoilAnalysis() {
       layer: selectedSoilLayer,
       bbox: currentBounds
     }
+
+    // Clear any polygon overlay when doing farmland analysis
+    setSoilImageOverlay(null, null)
 
     farmlandAnalysisMutation.mutate(params)
     farmlandGeoJSONMutation.mutate(currentBounds)
@@ -609,6 +634,9 @@ export function SoilAnalysis() {
   // Update farmland colors when both results and GeoJSON are available
   useEffect(() => {
     if (farmlandResults && farmlandGeoJSONMutation.data && analysisType === 'farmland') {
+      // Clear any polygon overlay when showing farmland results
+      setSoilImageOverlay(null, null)
+      
       setFarmlandGeoJSON({
         geoJSON: farmlandGeoJSONMutation.data,
         colorData: {
@@ -617,8 +645,11 @@ export function SoilAnalysis() {
           farmlands: farmlandResults.farmlands || []
         }
       })
+    } else if (analysisType === 'polygon') {
+      // Clear farmland overlay when showing polygon results
+      setFarmlandGeoJSON(null)
     }
-  }, [farmlandResults, farmlandGeoJSONMutation.data, analysisType, setFarmlandGeoJSON])
+  }, [farmlandResults, farmlandGeoJSONMutation.data, analysisType, setFarmlandGeoJSON, setSoilImageOverlay])
 
   // Determine if user can analyze farmland based on zoom level
   const canAnalyzeFarmland = currentZoom >= 12 // Show farmland analysis at zoom 12+

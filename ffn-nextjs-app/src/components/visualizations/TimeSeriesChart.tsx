@@ -12,61 +12,102 @@ interface TimeSeriesChartProps {
   data: TimeSeriesData[]
   comparisonData?: TimeSeriesData[]
   showComparison?: boolean
+  primaryLabel?: string
+  comparisonLabel?: string
 }
 
-export function TimeSeriesChart({ data, comparisonData, showComparison }: TimeSeriesChartProps) {
-  if (!data || data.length === 0) {
+// Helper function to create chart data from dataset
+function createChartData(dataset: TimeSeriesData[]) {
+  return dataset.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .map((item, index) => {
+      // Parse YYYY-MM-DD format explicitly to avoid timezone issues
+      let date: Date
+      if (typeof item.date === 'string' && item.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // For YYYY-MM-DD format, create date explicitly to avoid timezone issues
+        const [year, month, day] = item.date.split('-').map(Number)
+        date = new Date(year, month - 1, day) // month is 0-indexed in Date constructor
+      } else {
+        // Fallback to standard Date parsing
+        date = new Date(item.date)
+      }
+      
+      // Debug logging to verify date parsing
+      if (index === 0) {
+        console.log('Date parsing check:', {
+          rawDate: item.date,
+          parsedDate: date,
+          isValid: !isNaN(date.getTime()),
+          year: date.getFullYear(),
+          month: date.getMonth(),
+          day: date.getDate(),
+          formatted: date.toLocaleDateString(),
+          timezone: date.getTimezoneOffset()
+        })
+      }
+      
+      // Validate parsed date
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date found:', item.date)
+        return null
+      }
+      
+      const month = date.getMonth() // 0-11
+      const dayOfMonth = date.getDate() // 1-31
+      // Calculate month progress (0-12, where 0 = Jan 1, 12 = Dec 31)
+      const monthProgress = month + (dayOfMonth - 1) / 31
+      
+      return {
+        ...item,
+        formattedDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        fullDate: formatDate(item.date),
+        month: month,
+        monthProgress: monthProgress,
+        monthName: date.toLocaleDateString('en-US', { month: 'short' }),
+        value: item.mean
+      }
+    })
+    .filter(item => item !== null) // Remove any invalid dates
+}
+
+// Helper function to render a single chart
+function renderSingleChart(chartData: any[], color: string, label: string, height: string = "h-64") {
+  const values = chartData.map(d => d.value).filter(v => v !== null)
+  
+  if (values.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500">
-        No time series data available
+      <div className={`flex items-center justify-center ${height} text-gray-500 border rounded-lg`}>
+        No data available for {label}
       </div>
     )
   }
-
-  const sortedData = data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  const sortedComparisonData = comparisonData?.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
   
-  const chartData = sortedData.map((item, index) => {
-    const date = new Date(item.date)
-    const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
-    
-    let comparisonValue = null
-    if (showComparison && sortedComparisonData) {
-      const comparisonItem = sortedComparisonData.find(comp => {
-        const compDate = new Date(comp.date)
-        return compDate.getMonth() === date.getMonth() && compDate.getDate() === date.getDate()
-      })
-      comparisonValue = comparisonItem?.mean || null
-    }
-    
-    return {
-      ...item,
-      formattedDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      fullDate: formatDate(item.date),
-      normalizedX: index,
-      dayOfYear,
-      value: item.mean,
-      comparisonValue
-    }
-  })
+  const minValue = Math.min(...values)
+  const maxValue = Math.max(...values)
+  const padding = (maxValue - minValue) * 0.1
+  const yAxisDomain = [
+    Math.max(-1, minValue - padding),
+    Math.min(1, maxValue + padding)
+  ]
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload
-      const healthStatus = data.value > 0.7 ? 'Excellent' : data.value > 0.4 ? 'Good' : 'Poor'
-      const statusColor = data.value > 0.7 ? '#059669' : data.value > 0.4 ? '#d97706' : '#dc2626'
+      const currentValue = data.value !== null && data.value !== undefined ? data.value : null
+      
+      let healthStatus = 'No data'
+      let statusColor = '#6b7280'
+      
+      if (currentValue !== null) {
+        healthStatus = currentValue > 0.7 ? 'Excellent' : currentValue > 0.4 ? 'Good' : 'Poor'
+        statusColor = currentValue > 0.7 ? '#059669' : currentValue > 0.4 ? '#d97706' : '#dc2626'
+      }
       
       return (
         <div className="bg-white dark:bg-gray-800 p-3 border rounded-lg shadow-lg">
           <p className="font-medium text-gray-900 dark:text-gray-100">{data.fullDate}</p>
-          <p className="text-green-600 dark:text-green-400">
-            <span className="font-medium">Current:</span> {data.value.toFixed(3)}
+          <p className="font-medium" style={{ color }}>
+            {label}: {currentValue !== null ? currentValue.toFixed(3) : 'No data'}
           </p>
-          {showComparison && data.comparisonValue && (
-            <p className="text-blue-600 dark:text-blue-400">
-              <span className="font-medium">Comparison:</span> {data.comparisonValue.toFixed(3)}
-            </p>
-          )}
           <p style={{ color: statusColor }}>
             <span className="font-medium">Health:</span> {healthStatus}
           </p>
@@ -76,18 +117,14 @@ export function TimeSeriesChart({ data, comparisonData, showComparison }: TimeSe
     return null
   }
 
-  const values = chartData.map(d => d.value)
-  const minValue = Math.min(...values)
-  const maxValue = Math.max(...values)
-  const padding = (maxValue - minValue) * 0.1
-  const yAxisDomain = [
-    Math.max(-1, minValue - padding),
-    Math.min(1, maxValue + padding)
-  ]
-
   return (
-    <div className="w-full h-64">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className={`w-full ${height}`}>
+      <div className="mb-2">
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300" style={{ color }}>
+          {label}
+        </h4>
+      </div>
+      <ResponsiveContainer width="100%" height="90%">
         <LineChart
           data={chartData}
           margin={{
@@ -99,20 +136,19 @@ export function TimeSeriesChart({ data, comparisonData, showComparison }: TimeSe
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
-            dataKey="normalizedX"
+            dataKey="monthProgress"
             type="number"
-            domain={[0, chartData.length - 1]}
+            domain={[0, 12]}
             tickFormatter={(value) => {
-              const item = chartData[Math.round(value)]
-              return item ? item.formattedDate : ''
+              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+              const monthIndex = Math.floor(value)
+              return monthIndex >= 0 && monthIndex < 12 ? monthNames[monthIndex] : ''
             }}
-            ticks={chartData.length > 10 ? 
-              chartData.filter((_, i) => i % Math.ceil(chartData.length / 8) === 0).map(d => d.normalizedX) :
-              chartData.map(d => d.normalizedX)
-            }
-            angle={-45}
-            textAnchor="end"
-            height={60}
+            ticks={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]}
+            angle={0}
+            textAnchor="middle"
+            height={40}
             fontSize={11}
             stroke="#6b7280"
           />
@@ -125,34 +161,79 @@ export function TimeSeriesChart({ data, comparisonData, showComparison }: TimeSe
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#10b981"
+            stroke={color}
             strokeWidth={3}
-            dot={chartData.length <= 20 ? { fill: '#10b981', strokeWidth: 2, r: 4 } : false}
-            activeDot={{ r: 6, fill: '#059669', stroke: '#ffffff', strokeWidth: 2 }}
+            dot={chartData.length <= 20 ? { fill: color, strokeWidth: 2, r: 4 } : false}
+            activeDot={{ r: 6, fill: color, stroke: '#ffffff', strokeWidth: 2 }}
             connectNulls={false}
             strokeLinecap="round"
-            name="Current Period"
           />
-          {showComparison && (
-            <Line
-              type="monotone"
-              dataKey="comparisonValue"
-              stroke="#3b82f6"
-              strokeWidth={3}
-              strokeDasharray="5 5"
-              dot={chartData.length <= 20 ? { fill: '#3b82f6', strokeWidth: 2, r: 4 } : false}
-              activeDot={{ r: 6, fill: '#2563eb', stroke: '#ffffff', strokeWidth: 2 }}
-              connectNulls={false}
-              strokeLinecap="round"
-              name="Comparison Year"
-            />
-          )}
         </LineChart>
       </ResponsiveContainer>
+    </div>
+  )
+}
+
+export function TimeSeriesChart({ data, comparisonData, showComparison, primaryLabel, comparisonLabel }: TimeSeriesChartProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-500">
+        No time series data available
+      </div>
+    )
+  }
+
+  const primaryChartData = createChartData(data)
+  const comparisonChartData = comparisonData ? createChartData(comparisonData) : null
+
+  if (showComparison && comparisonChartData) {
+    // Render two stacked charts for comparison
+    return (
+      <div className="w-full space-y-4">
+        {/* Primary Chart */}
+        {renderSingleChart(
+          primaryChartData, 
+          "#10b981", 
+          primaryLabel || "Current Period",
+          "h-56"
+        )}
+        
+        {/* Comparison Chart */}
+        {renderSingleChart(
+          comparisonChartData, 
+          "#3b82f6", 
+          comparisonLabel || "Comparison Period",
+          "h-56"
+        )}
+        
+        {/* Combined Footer */}
+        <div className="flex justify-between text-xs text-muted-foreground px-4">
+          <span>
+            {primaryLabel || "Primary"}: {data.length} measurements
+          </span>
+          <span>
+            {comparisonLabel || "Comparison"}: {comparisonData?.length || 0} measurements
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Render single chart for non-comparison mode
+  return (
+    <div className="w-full">
+      {renderSingleChart(
+        primaryChartData, 
+        "#10b981", 
+        primaryLabel || "NDVI Over Time",
+        "h-64"
+      )}
       
       <div className="mt-4 flex justify-between text-xs text-muted-foreground">
         <span>{data.length} measurements</span>
-        <span>{chartData[0].fullDate} → {chartData[chartData.length - 1].fullDate}</span>
+        <span>
+          {primaryChartData[0]?.fullDate} → {primaryChartData[primaryChartData.length - 1]?.fullDate}
+        </span>
       </div>
     </div>
   )

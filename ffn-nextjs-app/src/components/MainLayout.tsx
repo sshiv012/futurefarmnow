@@ -13,11 +13,16 @@ import { toast } from '@/lib/utils/toast'
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [helpModalOpen, setHelpModalOpen] = useState(false)
-  const { clearArea } = useMapStore()
+  const { clearArea, clearAllAnalysis } = useMapStore()
 
   const handleClearArea = () => {
     clearArea()
     toast.success('Area cleared! You can now draw a new area.')
+  }
+
+  const handleClearAnalysis = () => {
+    clearAllAnalysis()
+    toast.success('All analysis results cleared!')
   }
 
   return (
@@ -44,7 +49,7 @@ export function MainLayout() {
         <Sidebar 
           onClose={() => setSidebarOpen(false)}
           onShowHelp={() => setHelpModalOpen(true)}
-          onClearArea={handleClearArea}
+          onClearAnalysis={handleClearAnalysis}
         />
       </aside>
 

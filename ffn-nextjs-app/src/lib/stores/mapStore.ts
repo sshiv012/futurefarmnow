@@ -18,11 +18,12 @@ interface MapState {
     from: string
     to: string
   }
-  
+
   // UI state
   activeTab: 'soil' | 'ndvi' | 'sample'
   isAnalyzing: boolean
-  
+  clearTrigger: number // Incremented when clear is triggered
+
   // Actions
   setSelectedDataset: (dataset: string | null) => void
   setCurrentBounds: (bounds: BoundingBox | null) => void
@@ -33,6 +34,7 @@ interface MapState {
   setSoilImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
   setFarmlandGeoJSON: (geoJSON: any | null) => void
   clearArea: () => void
+  clearAllAnalysis: () => void
   setSelectedSoilLayer: (layer: SoilLayerEnum) => void
   setSelectedSoilDepth: (depth: string) => void
   setSelectedDateRange: (range: { from: string; to: string }) => void
@@ -54,12 +56,13 @@ export const useMapStore = create<MapState>((set, get) => ({
   selectedSoilLayer: 'ph',
   selectedSoilDepth: '0-5',
   selectedDateRange: {
-    from: '2023-01-01',
-    to: '2023-12-31',
+    from: '2024-01-01',
+    to: '2024-12-31',
   },
   activeTab: 'soil',
   isAnalyzing: false,
-  
+  clearTrigger: 0,
+
   setSelectedDataset: (dataset) => set({ selectedDataset: dataset }),
   setCurrentBounds: (bounds) => set({ currentBounds: bounds }),
   setDrawnPolygon: (polygon) => set({ drawnPolygon: polygon }),
@@ -74,6 +77,20 @@ export const useMapStore = create<MapState>((set, get) => ({
       drawnItems.clearLayers()
     }
     set({ drawnPolygon: null, soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null })
+  },
+  clearAllAnalysis: () => {
+    const { drawnItems, clearTrigger } = get()
+    if (drawnItems) {
+      drawnItems.clearLayers()
+    }
+    set({
+      drawnPolygon: null,
+      soilImageUrl: null,
+      soilImageBounds: null,
+      farmlandGeoJSON: null,
+      isAnalyzing: false,
+      clearTrigger: clearTrigger + 1
+    })
   },
   setSelectedSoilLayer: (layer) => set({ selectedSoilLayer: layer }),
   setSelectedSoilDepth: (depth) => set({ selectedSoilDepth: depth }),
@@ -93,10 +110,11 @@ export const useMapStore = create<MapState>((set, get) => ({
     selectedSoilLayer: 'ph',
     selectedSoilDepth: '0-5',
     selectedDateRange: {
-      from: '2023-01-01',
-      to: '2023-12-31',
+      from: '2024-01-01',
+      to: '2024-12-31',
     },
     activeTab: 'soil',
     isAnalyzing: false,
+    clearTrigger: 0,
   }),
 }))

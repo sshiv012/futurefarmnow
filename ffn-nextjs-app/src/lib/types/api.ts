@@ -24,9 +24,9 @@ export interface GeoJSONFeatureCollection {
   features: GeoJSONFeature[]
 }
 
-export type SoilLayerEnum = 
-  | 'alpha' | 'bd' | 'clay' | 'hb' | 'ksat' 
-  | 'lambda' | 'n' | 'om' | 'ph' | 'sand' 
+export type SoilLayerEnum =
+  | 'alpha' | 'bd' | 'clay' | 'hb' | 'ksat'
+  | 'lambda' | 'n' | 'om' | 'ph' | 'sand'
   | 'silt' | 'theta_r' | 'theta_s'
 
 export interface Statistics {
@@ -86,7 +86,6 @@ export interface NDVIMultiPolygonResponse {
   }>
 }
 
-// Request Parameters
 export interface BoundingBox {
   minx: number
   miny: number
@@ -113,7 +112,6 @@ export interface SoilSampleParams {
   geometry: GeoJSONGeometry
 }
 
-// Error Response
 export interface APIError {
   message: string
   code?: string

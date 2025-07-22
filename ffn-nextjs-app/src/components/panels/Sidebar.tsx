@@ -16,10 +16,10 @@ import { cn } from '@/lib/utils'
 interface SidebarProps {
   onClose?: () => void
   onShowHelp?: () => void
-  onClearArea?: () => void
+  onClearAnalysis?: () => void
 }
 
-export function Sidebar({ onClose, onShowHelp, onClearArea }: SidebarProps) {
+export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) {
   const { activeTab, setActiveTab, drawnPolygon } = useMapStore()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -121,17 +121,15 @@ export function Sidebar({ onClose, onShowHelp, onClearArea }: SidebarProps) {
               Help
             </Button>
             
-            {drawnPolygon && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onClearArea}
-                className="flex-1 text-sm"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Clear Area
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onClearAnalysis}
+              className="w-full text-sm"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear Analysis
+            </Button>
           </div>
         </div>
       )}

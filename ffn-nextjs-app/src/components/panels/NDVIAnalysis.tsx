@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useMutation } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
 import { TimeSeriesChart } from '@/components/visualizations/TimeSeriesChart'
-import { AlertCircle, TrendingUp, Calendar, Download, GitCompare } from 'lucide-react'
+import { AlertCircle, Calendar, Download, GitCompare } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 export function NDVIAnalysis() {
@@ -17,7 +17,8 @@ export function NDVIAnalysis() {
     currentZoom,
     currentBounds,
     selectedDataset,
-    setSelectedDateRange
+    setSelectedDateRange,
+    clearTrigger
   } = useMapStore()
 
   const [results, setResults] = useState<any>(null)
@@ -25,6 +26,34 @@ export function NDVIAnalysis() {
   const [analyzingType, setAnalyzingType] = useState<'polygon' | 'farmland' | null>(null)
   const [comparisonYear, setComparisonYear] = useState<string>('')
   const [isComparison, setIsComparison] = useState(false)
+  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
+  const [isCustomDate, setIsCustomDate] = useState(false)
+
+  // Initialize year-based date range on component mount
+  useEffect(() => {
+    if (!isCustomDate) {
+      const year = selectedYear
+      const dateRange = {
+        from: `${year}-01-01`,
+        to: `${year}-12-31`
+      }
+      console.log('Initializing year-based date range on mount:', { year, dateRange })
+      setSelectedDateRange(dateRange)
+    }
+  }, [selectedYear, isCustomDate, setSelectedDateRange]) // Include dependencies
+
+  // Clear state when clearTrigger changes
+  useEffect(() => {
+    if (clearTrigger > 0) {
+      setResults(null)
+      setComparisonResults(null)
+      setAnalyzingType(null)
+      setComparisonYear('')
+      setIsComparison(false)
+      setSelectedYear(new Date().getFullYear().toString())
+      setIsCustomDate(false)
+    }
+  }, [clearTrigger])
 
   const ndviAnalysisMutation = useMutation({
     mutationFn: async (params: any) => {
@@ -59,13 +88,23 @@ export function NDVIAnalysis() {
       return
     }
 
+    // Clear any farmland results when analyzing polygon
     setResults(null)
+    setComparisonResults(null)
+    setIsComparison(false)
     setAnalyzingType('polygon')
     const params = {
       from: selectedDateRange.from,
       to: selectedDateRange.to,
       geometry: drawnPolygon
     }
+    console.log('NDVI Analysis Params:', { 
+      selectedYear, 
+      isCustomDate, 
+      from: params.from, 
+      to: params.to,
+      selectedDateRange 
+    })
     toast('Checking your crop health over time...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
   }
@@ -76,7 +115,10 @@ export function NDVIAnalysis() {
       return
     }
 
+    // Clear any polygon results when analyzing farmlands
     setResults(null)
+    setComparisonResults(null)
+    setIsComparison(false)
     setAnalyzingType('farmland')
     const params = {
       from: selectedDateRange.from,
@@ -84,6 +126,13 @@ export function NDVIAnalysis() {
       bbox: currentBounds,
       isFarmlandAnalysis: true
     }
+    console.log('NDVI Farmland Analysis Params:', { 
+      selectedYear, 
+      isCustomDate, 
+      from: params.from, 
+      to: params.to,
+      selectedDateRange 
+    })
     toast('Analyzing crop health for all farmlands in view...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
   }
@@ -91,29 +140,48 @@ export function NDVIAnalysis() {
   const handleCompareYear = () => {
     if (!comparisonYear || !results) return
     
-    const fromDate = new Date(selectedDateRange.from)
-    const toDate = new Date(selectedDateRange.to)
+    let comparisonFrom: string
+    let comparisonTo: string
     
-    const comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
-    const comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
-    
-    const params = {
-      from: comparisonFrom,
-      to: comparisonTo,
-      geometry: drawnPolygon || { bbox: currentBounds, isFarmlandAnalysis: true }
+    if (isCustomDate) {
+      // For custom date ranges, try to match the same time period in the comparison year
+      const fromDate = new Date(selectedDateRange.from)
+      const toDate = new Date(selectedDateRange.to)
+      
+      comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
+      comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
+    } else {
+      // For year-based selection, compare full years
+      comparisonFrom = `${comparisonYear}-01-01`
+      comparisonTo = `${comparisonYear}-12-31`
     }
     
+    console.log('Comparison dates:', { 
+      comparisonYear, 
+      isCustomDate, 
+      selectedYear,
+      selectedDateRange,
+      comparisonFrom, 
+      comparisonTo 
+    })
+    
     setAnalyzingType('polygon')
-    toast(`Comparing with ${comparisonYear}...`, { icon: '⏳' })
+    toast(`Comparing ${selectedYear} with ${comparisonYear}...`, { icon: '⏳' })
     
     // Create a separate mutation for comparison
     if (drawnPolygon) {
       apiClient.getNDVIForPolygon({ from: comparisonFrom, to: comparisonTo, geometry: drawnPolygon })
         .then(data => {
-          setComparisonResults(data.results || data)
-          setIsComparison(true)
-          setAnalyzingType(null)
-          toast.success(`Comparison with ${comparisonYear} loaded!`)
+          const results = data.results || data
+          if (results && results.length > 0) {
+            setComparisonResults(results)
+            setIsComparison(true)
+            setAnalyzingType(null)
+            toast.success(`Comparison with ${comparisonYear} loaded! Found ${results.length} data points.`)
+          } else {
+            setAnalyzingType(null)
+            toast.error(`No records found for ${comparisonYear}. Try a different year or check if data is available for that period.`)
+          }
         })
         .catch(error => {
           setAnalyzingType(null)
@@ -122,10 +190,16 @@ export function NDVIAnalysis() {
     } else if (canAnalyzeFarmlands) {
       apiClient.getNDVIForRegion('farmland', comparisonFrom, comparisonTo, currentBounds || undefined)
         .then(data => {
-          setComparisonResults(data.results || data)
-          setIsComparison(true)
-          setAnalyzingType(null)
-          toast.success(`Comparison with ${comparisonYear} loaded!`)
+          const results = data.results || data
+          if (results && results.length > 0) {
+            setComparisonResults(results)
+            setIsComparison(true)
+            setAnalyzingType(null)
+            toast.success(`Comparison with ${comparisonYear} loaded! Found ${results.length} farmlands.`)
+          } else {
+            setAnalyzingType(null)
+            toast.error(`No farmland records found for ${comparisonYear}. Try a different year or check if data is available for that period.`)
+          }
         })
         .catch(error => {
           setAnalyzingType(null)
@@ -160,15 +234,22 @@ export function NDVIAnalysis() {
       // Analysis details
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`Analysis Period: ${selectedDateRange.from} to ${selectedDateRange.to}`, 20, yPosition)
+      pdf.text(`Analysis Period: ${isCustomDate ? `${selectedDateRange.from} to ${selectedDateRange.to}` : `Full year ${selectedYear}`}`, 20, yPosition)
       yPosition += 8
       pdf.text(`Analysis Date: ${new Date().toLocaleDateString()}`, 20, yPosition)
       yPosition += 8
-      const totalDays = Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))
+      const totalDays = isCustomDate 
+        ? Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))
+        : 365
       pdf.text(`Duration: ${totalDays} days`, 20, yPosition)
       yPosition += 8
       pdf.text(`Data Points: ${results.length} measurements`, 20, yPosition)
-      yPosition += 15
+      yPosition += 8
+      if (isComparison && comparisonResults) {
+        pdf.text(`Comparison Year: ${comparisonYear} (${comparisonResults.length} measurements)`, 20, yPosition)
+        yPosition += 8
+      }
+      yPosition += 7
       
       // Chart
       const chartElement = document.getElementById('ndvi-chart-container')
@@ -213,17 +294,68 @@ export function NDVIAnalysis() {
       
       pdf.setFontSize(11)
       pdf.setFont('helvetica', 'normal')
+      
+      // Primary period statistics
+      const primaryPeriod = isComparison ? selectedYear : `${selectedDateRange.from} to ${selectedDateRange.to}`
+      pdf.setFontSize(12)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(`${primaryPeriod} Statistics:`, 25, yPosition)
+      yPosition += 8
+      
+      pdf.setFontSize(11)
+      pdf.setFont('helvetica', 'normal')
       const stats = [
         `Average NDVI: ${avgHealth}`,
         `Minimum NDVI: ${minHealth}`,
         `Maximum NDVI: ${maxHealth}`,
-        `Health Status: ${parseFloat(avgHealth) > 0.7 ? 'Excellent' : parseFloat(avgHealth) > 0.4 ? 'Good' : 'Poor'}`
+        `Health Status: ${parseFloat(avgHealth) > 0.5 ? 'Excellent' : parseFloat(avgHealth) > 0.2 ? 'Good' : 'Poor'}`
       ]
       
       stats.forEach(stat => {
-        pdf.text(`• ${stat}`, 25, yPosition)
+        pdf.text(`• ${stat}`, 30, yPosition)
         yPosition += 7
       })
+      
+      // Comparison statistics if available
+      if (isComparison && comparisonResults && comparisonResults.length > 0) {
+        yPosition += 5
+        const compAvgHealth = (comparisonResults.reduce((sum: number, point: any) => sum + point.mean, 0) / comparisonResults.length).toFixed(3)
+        const compMinHealth = Math.min(...comparisonResults.map((point: any) => point.mean)).toFixed(3)
+        const compMaxHealth = Math.max(...comparisonResults.map((point: any) => point.mean)).toFixed(3)
+        
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(`${comparisonYear} Comparison Statistics:`, 25, yPosition)
+        yPosition += 8
+        
+        pdf.setFontSize(11)
+        pdf.setFont('helvetica', 'normal')
+        const compStats = [
+          `Average NDVI: ${compAvgHealth}`,
+          `Minimum NDVI: ${compMinHealth}`,
+          `Maximum NDVI: ${compMaxHealth}`,
+          `Health Status: ${parseFloat(compAvgHealth) > 0.5 ? 'Excellent' : parseFloat(compAvgHealth) > 0.2 ? 'Good' : 'Poor'}`
+        ]
+        
+        compStats.forEach(stat => {
+          pdf.text(`• ${stat}`, 30, yPosition)
+          yPosition += 7
+        })
+        
+        // Comparison analysis
+        yPosition += 5
+        const avgDiff = (parseFloat(avgHealth) - parseFloat(compAvgHealth)).toFixed(3)
+        const improvementText = parseFloat(avgDiff) > 0 ? 'improved' : 'decreased'
+        pdf.setFontSize(12)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text('Year-over-Year Analysis:', 25, yPosition)
+        yPosition += 8
+        
+        pdf.setFontSize(11)
+        pdf.setFont('helvetica', 'normal')
+        pdf.text(`• Average NDVI ${improvementText} by ${Math.abs(parseFloat(avgDiff)).toFixed(3)} (${(Math.abs(parseFloat(avgDiff)) / parseFloat(compAvgHealth) * 100).toFixed(1)}%)`, 30, yPosition)
+        yPosition += 7
+      }
       
       // Data table
       yPosition += 10
@@ -240,29 +372,72 @@ export function NDVIAnalysis() {
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
       
-      // Table header
-      pdf.text('Date', 25, yPosition)
-      pdf.text('NDVI Value', 80, yPosition)
-      pdf.text('Health Status', 130, yPosition)
-      yPosition += 7
-      
-      // Table data
-      results.slice(0, 20).forEach((point: any) => {
-        if (yPosition > pageHeight - 20) {
-          pdf.addPage()
-          yPosition = 20
-        }
+      if (isComparison && comparisonResults) {
+        // Table header for comparison
+        pdf.text('Date', 25, yPosition)
+        pdf.text(`${selectedYear}`, 75, yPosition)
+        pdf.text(`${comparisonYear}`, 110, yPosition)
+        pdf.text('Difference', 145, yPosition)
+        yPosition += 7
         
-        const healthStatus = point.mean > 0.7 ? 'Excellent' : point.mean > 0.4 ? 'Good' : 'Poor'
-        pdf.text(new Date(point.date).toLocaleDateString(), 25, yPosition)
-        pdf.text(point.mean.toFixed(3), 80, yPosition)
-        pdf.text(healthStatus, 130, yPosition)
-        yPosition += 6
-      })
-      
-      if (results.length > 20) {
-        yPosition += 5
-        pdf.text(`... and ${results.length - 20} more measurements`, 25, yPosition)
+        // Create a merged dataset for comparison table
+        const mergedData = results.slice(0, 15).map((point: any) => {
+          const compPoint = comparisonResults.find((comp: any) => comp.date === point.date)
+          return {
+            date: point.date,
+            current: point.mean,
+            comparison: compPoint?.mean,
+            difference: compPoint ? (point.mean - compPoint.mean) : null
+          }
+        })
+        
+        mergedData.forEach((row: any) => {
+          if (yPosition > pageHeight - 20) {
+            pdf.addPage()
+            yPosition = 20
+          }
+          
+          pdf.text(new Date(row.date).toLocaleDateString(), 25, yPosition)
+          pdf.text(row.current.toFixed(3), 75, yPosition)
+          pdf.text(row.comparison ? row.comparison.toFixed(3) : 'N/A', 110, yPosition)
+          if (row.difference !== null) {
+            const diffText = row.difference >= 0 ? `+${row.difference.toFixed(3)}` : row.difference.toFixed(3)
+            pdf.text(diffText, 145, yPosition)
+          } else {
+            pdf.text('N/A', 145, yPosition)
+          }
+          yPosition += 6
+        })
+        
+        if (results.length > 15) {
+          yPosition += 5
+          pdf.text(`... and ${results.length - 15} more measurements`, 25, yPosition)
+        }
+      } else {
+        // Table header for single period
+        pdf.text('Date', 25, yPosition)
+        pdf.text('NDVI Value', 80, yPosition)
+        pdf.text('Health Status', 130, yPosition)
+        yPosition += 7
+        
+        // Table data
+        results.slice(0, 20).forEach((point: any) => {
+          if (yPosition > pageHeight - 20) {
+            pdf.addPage()
+            yPosition = 20
+          }
+          
+          const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
+          pdf.text(new Date(point.date).toLocaleDateString(), 25, yPosition)
+          pdf.text(point.mean.toFixed(3), 80, yPosition)
+          pdf.text(healthStatus, 130, yPosition)
+          yPosition += 6
+        })
+        
+        if (results.length > 20) {
+          yPosition += 5
+          pdf.text(`... and ${results.length - 20} more measurements`, 25, yPosition)
+        }
       }
       
       // Footer
@@ -298,37 +473,74 @@ export function NDVIAnalysis() {
         </h3>
 
         <div className="text-sm text-muted-foreground mb-4">
-          NDVI (Normalized Difference Vegetation Index) measures vegetation health using satellite data. Values range 0-1: higher = greener/healthier crops.
+          NDVI (Normalized Difference Vegetation Index) measures vegetation health using satellite data. Values range -1 to 1: higher = greener/healthier crops.
         </div>
 
         <div className="space-y-4">
           <div className="flex items-baseline gap-4">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
-              Start Date
+              Time Period
             </label>
-            <Input
-              type="date"
-              value={selectedDateRange.from}
-              onChange={(e) => handleDateChange('from', e.target.value)}
-              max={selectedDateRange.to}
-              className="flex-1"
-              style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
-            />
+            <select
+              value={isCustomDate ? 'custom' : selectedYear}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  setIsCustomDate(true)
+                  console.log('Switched to custom date mode')
+                } else {
+                  setIsCustomDate(false)
+                  setSelectedYear(e.target.value)
+                  // Set date range to full year
+                  const year = e.target.value
+                  const dateRange = {
+                    from: `${year}-01-01`,
+                    to: `${year}-12-31`
+                  }
+                  console.log('Setting year-based date range:', { year, dateRange })
+                  setSelectedDateRange(dateRange)
+                }
+              }}
+              className="flex-1 h-10 px-3 py-2 border border-input bg-background text-sm rounded-md"
+            >
+              {/* Generate years from 2015 to current year */}
+              {Array.from({ length: new Date().getFullYear() - 2014 }, (_, i) => 2015 + i).reverse().map(year => (
+                <option key={year} value={year.toString()}>{year}</option>
+              ))}
+              <option value="custom">Custom Date Range</option>
+            </select>
           </div>
           
-          <div className="flex items-baseline gap-4">
-            <label className="text-sm font-medium text-foreground w-20 shrink-0">
-              End Date
-            </label>
-            <Input
-              type="date"
-              value={selectedDateRange.to}
-              onChange={(e) => handleDateChange('to', e.target.value)}
-              min={selectedDateRange.from}
-              className="flex-1"
-              style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
-            />
-          </div>
+          {isCustomDate && (
+            <>
+              <div className="flex items-baseline gap-4">
+                <label className="text-sm font-medium text-foreground w-20 shrink-0">
+                  Start Date
+                </label>
+                <Input
+                  type="date"
+                  value={selectedDateRange.from}
+                  onChange={(e) => handleDateChange('from', e.target.value)}
+                  max={selectedDateRange.to}
+                  className="flex-1"
+                  style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
+                />
+              </div>
+              
+              <div className="flex items-baseline gap-4">
+                <label className="text-sm font-medium text-foreground w-20 shrink-0">
+                  End Date
+                </label>
+                <Input
+                  type="date"
+                  value={selectedDateRange.to}
+                  onChange={(e) => handleDateChange('to', e.target.value)}
+                  min={selectedDateRange.from}
+                  className="flex-1"
+                  style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Date range info */}
@@ -336,13 +548,26 @@ export function NDVIAnalysis() {
           <p className="font-medium text-foreground">
             Selected time period:
           </p>
-          <p className="text-muted-foreground mt-1">
-            From {new Date(selectedDateRange.from).toLocaleDateString()} to{' '}
-            {new Date(selectedDateRange.to).toLocaleDateString()}
-          </p>
-          <p className="text-muted-foreground">
-            Total days: {Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))}
-          </p>
+          {isCustomDate ? (
+            <>
+              <p className="text-muted-foreground mt-1">
+                From {new Date(selectedDateRange.from).toLocaleDateString()} to{' '}
+                {new Date(selectedDateRange.to).toLocaleDateString()}
+              </p>
+              <p className="text-muted-foreground">
+                Total days: {Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-muted-foreground mt-1">
+                Full year {selectedYear}
+              </p>
+              <p className="text-muted-foreground">
+                Duration: 365 days (January 1 - December 31, {selectedYear})
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -361,10 +586,7 @@ export function NDVIAnalysis() {
                 Analyzing...
               </>
             ) : (
-              <>
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Check Crop Health
-              </>
+              'Check Crop Health'
             )}
           </Button>
         </div>
@@ -384,10 +606,7 @@ export function NDVIAnalysis() {
                   Analyzing...
                 </>
               ) : (
-                <>
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Analyze All Farmlands in View
-                </>
+                'Analyze All Farmlands in View'
               )}
             </Button>
           </div>
@@ -403,7 +622,7 @@ export function NDVIAnalysis() {
 
         {canAnalyzeFarmlands && (
           <div className="mt-2 flex items-start space-x-2 text-green-600 dark:text-green-400 text-sm">
-            <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p>You can draw a specific area or analyze all farmland visible in the current view</p>
           </div>
         )}
@@ -414,7 +633,7 @@ export function NDVIAnalysis() {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground flex items-center">
-              <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
+              <Calendar className="h-5 w-5 mr-2 text-green-600" />
               Your Crop Health Over Time
             </h3>
             <div className="flex gap-2">
@@ -443,44 +662,65 @@ export function NDVIAnalysis() {
 
           <div className="bg-muted/30 p-4 rounded-lg border">
             <div className="mb-3 text-sm text-muted-foreground">
-              {comparisonResults ? 'Green shows current period, blue shows comparison year:' : 'Green line shows how healthy your crops were on each date:'}
+              {comparisonResults ? 'Two charts for easy comparison - current period (green) and comparison year (blue):' : 'Green line shows how healthy your crops were on each date:'}
             </div>
             <div id="ndvi-chart-container">
               <TimeSeriesChart 
                 data={results} 
                 comparisonData={comparisonResults}
                 showComparison={isComparison}
+                primaryLabel={isComparison ? selectedYear : undefined}
+                comparisonLabel={isComparison ? comparisonYear : undefined}
               />
             </div>
           </div>
           
-          {!isComparison && (
-            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400">
+          {!isCustomDate && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Compare with Another Year</h4>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">See how this period compares to the same timeframe in a different year</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">See how {selectedYear} compares to the same period in a different year</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <Input
                     type="number"
-                    placeholder="2024"
+                    placeholder="2023"
                     value={comparisonYear}
                     onChange={(e) => setComparisonYear(e.target.value)}
-                    className="w-20 text-sm"
-                    min="2000"
-                    max="2030"
+                    className="w-24 text-sm"
+                    min="2015"
+                    max="2035"
                   />
                   <Button
                     onClick={handleCompareYear}
                     size="sm"
-                    disabled={!comparisonYear || comparisonYear === selectedDateRange.from.split('-')[0]}
+                    disabled={!comparisonYear || comparisonYear === selectedYear}
                   >
-                    <GitCompare className="h-4 w-4 mr-1" />
+                    <GitCompare className="h-4 w-4 mr-2" />
                     Compare
                   </Button>
                 </div>
               </div>
+              {isComparison && comparisonResults && (
+                <div className="flex items-center justify-between pt-2 border-t border-blue-200 dark:border-blue-800">
+                  <span className="text-sm text-blue-700 dark:text-blue-300">
+                    Comparing {selectedYear} with {comparisonYear} • {comparisonResults.length} data points
+                  </span>
+                  <Button
+                    onClick={() => {
+                      setIsComparison(false)
+                      setComparisonResults(null)
+                      setComparisonYear('')
+                    }}
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                  >
+                    Clear Comparison
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -500,7 +740,7 @@ export function NDVIAnalysis() {
                 <dd className="text-lg font-semibold text-foreground">
                   {(results.reduce((sum: number, point: any) => sum + point.mean, 0) / results.length).toFixed(2)}
                 </dd>
-                <div className="text-xs text-muted-foreground mt-1">Overall crop health (0.0 - 1.0 scale)</div>
+                <div className="text-xs text-muted-foreground mt-1">Overall crop health (-1.0 to 1.0 scale)</div>
               </div>
 
               <div className="bg-muted/20 p-3 rounded-lg">
@@ -522,11 +762,12 @@ export function NDVIAnalysis() {
 
             <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border-l-4 border-green-400">
               <div className="text-sm text-green-800 dark:text-green-200">
-                <strong>🌱 Reading your results:</strong>
+                <strong>Reading your results:</strong>
                 <ul className="mt-1 space-y-1 list-disc list-inside">
-                  <li>Values above 0.7: Very healthy, lush green crops</li>
-                  <li>Values 0.4-0.7: Good crop health, normal growth</li>
-                  <li>Values below 0.4: May indicate stress, disease, or poor growth</li>
+                  <li>Values above 0.5: Very healthy, lush green crops</li>
+                  <li>Values 0.2-0.5: Good crop health, normal growth</li>
+                  <li>Values below 0.2: May indicate stress, disease, or poor growth</li>
+                  <li>Negative values: Usually bare soil, water, or non-vegetated areas</li>
                 </ul>
               </div>
             </div>
@@ -572,8 +813,8 @@ export function NDVIAnalysis() {
                 <tbody className="divide-y divide-border">
                   {results.map((point: any, index: number) => {
                     const healthScore = point.mean
-                    const healthStatus = healthScore > 0.7 ? 'Excellent' : healthScore > 0.4 ? 'Good' : 'Poor'
-                    const statusColor = healthScore > 0.7 ? 'text-green-600' : healthScore > 0.4 ? 'text-yellow-600' : 'text-red-600'
+                    const healthStatus = healthScore > 0.5 ? 'Excellent' : healthScore > 0.2 ? 'Good' : 'Poor'
+                    const statusColor = healthScore > 0.5 ? 'text-green-600' : healthScore > 0.2 ? 'text-yellow-600' : 'text-red-600'
 
                     return (
                       <tr key={index} className="hover:bg-muted/20">
@@ -602,14 +843,14 @@ export function NDVIAnalysis() {
 
       {results && results.length === 0 && (
         <div className="text-center py-8 text-muted-foreground">
-          <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+          <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
           <div className="space-y-2">
             <p className="font-medium">No crop health data found</p>
             <p className="text-sm">
               There might be no satellite images available for your selected area and time period.
             </p>
             <p className="text-xs text-muted-foreground/80">
-              Try selecting a different date range or check if your farm area is drawn correctly.
+              Try selecting a different {isCustomDate ? 'date range' : 'year'} or check if your farm area is drawn correctly.
             </p>
           </div>
         </div>

@@ -17,7 +17,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    // Get theme from localStorage or default to system
     const savedTheme = localStorage.getItem('theme') as Theme
     if (savedTheme) {
       setTheme(savedTheme)
@@ -35,13 +34,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
 
       setResolvedTheme(resolved)
-      
-      // Update DOM
+
       const root = window.document.documentElement
       root.classList.remove('light', 'dark')
       root.classList.add(resolved)
-      
-      // Update meta theme color
+
       const metaThemeColor = document.querySelector('meta[name="theme-color"]')
       if (metaThemeColor) {
         metaThemeColor.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#ffffff')
@@ -50,7 +47,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     updateTheme()
 
-    // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = () => {
       if (theme === 'system') {

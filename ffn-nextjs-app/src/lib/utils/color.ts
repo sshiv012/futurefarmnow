@@ -6,12 +6,10 @@
  * @returns RGB color string (black to white gradient)
  */
 export function valueToGrayscale(value: number, min: number, max: number): string {
-  // Normalize the value between 0 and 1
   const normalized = (value - min) / (max - min)
-  
-  // Convert to 0-255 scale
+
   const intensity = Math.round(normalized * 255)
-  
+
   // Return as rgb string (equal values = grayscale)
   return `rgb(${intensity}, ${intensity}, ${intensity})`
 }
@@ -25,9 +23,9 @@ export function valueToGrayscale(value: number, min: number, max: number): strin
  * @returns RGBA color string
  */
 export function valueToGrayscaleWithOpacity(
-  value: number, 
-  min: number, 
-  max: number, 
+  value: number,
+  min: number,
+  max: number,
   opacity: number = 0.6
 ): string {
   const normalized = (value - min) / (max - min)

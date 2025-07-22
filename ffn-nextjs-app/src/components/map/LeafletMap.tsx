@@ -79,8 +79,23 @@ export default function LeafletMap() {
         polygon: {
           showArea: true,
           showLength: true,
+          shapeOptions: {
+            color: '#3b82f6',
+            weight: 2,
+            opacity: 1,
+            fillColor: '#3b82f6',
+            fillOpacity: 0 // Make fill transparent during drawing
+          }
         },
-        rectangle: {},
+        rectangle: {
+          shapeOptions: {
+            color: '#3b82f6',
+            weight: 2,
+            opacity: 1,
+            fillColor: '#3b82f6',
+            fillOpacity: 0 // Make fill transparent during drawing
+          }
+        },
         circle: false,
         marker: false,
         polyline: false,
@@ -97,6 +112,16 @@ export default function LeafletMap() {
     // Handle drawing events
     map.on('draw:created', (event: any) => {
       const layer = event.layer
+      
+      // Style the layer to have transparent fill with visible border
+      layer.setStyle({
+        color: '#3b82f6',
+        weight: 2,
+        opacity: 1,
+        fillColor: '#3b82f6',
+        fillOpacity: 0 // Make fill transparent
+      })
+      
       drawnItems.addLayer(layer)
       
       // Convert to GeoJSON and store in state
@@ -116,6 +141,15 @@ export default function LeafletMap() {
     map.on('draw:edited', (event: any) => {
       const layers = event.layers
       layers.eachLayer((layer: any) => {
+        // Apply transparent style to edited layers
+        layer.setStyle({
+          color: '#3b82f6',
+          weight: 2,
+          opacity: 1,
+          fillColor: '#3b82f6',
+          fillOpacity: 0 // Keep fill transparent after editing
+        })
+        
         const geoJSON = layer.toGeoJSON()
         setDrawnPolygon(geoJSON.geometry)
       })
@@ -258,6 +292,28 @@ export default function LeafletMap() {
       soilImageOverlayRef.current = null
     }
 
+    // Show/hide drawn items based on soil image presence
+    if (drawnItemsRef.current) {
+      drawnItemsRef.current.eachLayer((layer: any) => {
+        if (soilImageUrl && soilImageBounds) {
+          // Hide drawn items when soil image is active to avoid blue overlay
+          layer.setStyle({ 
+            opacity: 0, 
+            fillOpacity: 0,
+            color: 'transparent'
+          })
+        } else {
+          // Show drawn items with transparent fill when no soil image
+          layer.setStyle({ 
+            opacity: 1, 
+            fillOpacity: 0,
+            color: '#3b82f6',
+            weight: 2
+          })
+        }
+      })
+    }
+
     // Add new overlay if image and bounds are available
     if (soilImageUrl && soilImageBounds) {
       const overlay = L.imageOverlay(soilImageUrl, soilImageBounds, {
@@ -268,11 +324,8 @@ export default function LeafletMap() {
       overlay.addTo(mapInstanceRef.current)
       soilImageOverlayRef.current = overlay
       
-      // Bring overlay to front but keep it below drawn items
+      // Bring overlay to front
       overlay.bringToFront()
-      if (drawnItemsRef.current) {
-        drawnItemsRef.current.bringToFront()
-      }
     }
   }, [soilImageUrl, soilImageBounds])
 
