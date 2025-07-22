@@ -6,6 +6,7 @@ interface MapState {
   selectedDataset: string | null
   currentBounds: BoundingBox | null
   drawnPolygon: GeoJSONGeometry | null
+  drawnPolygons: GeoJSONGeometry[] // Array to store multiple polygons
   currentZoom: number
   mapInstance: L.Map | null
   drawnItems: L.FeatureGroup | null
@@ -28,6 +29,8 @@ interface MapState {
   setSelectedDataset: (dataset: string | null) => void
   setCurrentBounds: (bounds: BoundingBox | null) => void
   setDrawnPolygon: (polygon: GeoJSONGeometry | null) => void
+  addDrawnPolygon: (polygon: GeoJSONGeometry) => void
+  setDrawnPolygons: (polygons: GeoJSONGeometry[]) => void
   setCurrentZoom: (zoom: number) => void
   setMapInstance: (map: L.Map | null) => void
   setDrawnItems: (drawnItems: L.FeatureGroup | null) => void
@@ -47,6 +50,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   selectedDataset: 'farmland',
   currentBounds: null,
   drawnPolygon: null,
+  drawnPolygons: [],
   currentZoom: 6,
   mapInstance: null,
   drawnItems: null,
@@ -66,6 +70,11 @@ export const useMapStore = create<MapState>((set, get) => ({
   setSelectedDataset: (dataset) => set({ selectedDataset: dataset }),
   setCurrentBounds: (bounds) => set({ currentBounds: bounds }),
   setDrawnPolygon: (polygon) => set({ drawnPolygon: polygon }),
+  addDrawnPolygon: (polygon) => set((state) => ({ 
+    drawnPolygons: [...state.drawnPolygons, polygon],
+    drawnPolygon: polygon // Keep last polygon as current
+  })),
+  setDrawnPolygons: (polygons) => set({ drawnPolygons: polygons }),
   setCurrentZoom: (zoom) => set({ currentZoom: zoom }),
   setMapInstance: (map) => set({ mapInstance: map }),
   setDrawnItems: (drawnItems) => set({ drawnItems }),
@@ -76,7 +85,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     if (drawnItems) {
       drawnItems.clearLayers()
     }
-    set({ drawnPolygon: null, soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null })
+    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null })
   },
   clearAllAnalysis: () => {
     const { drawnItems, clearTrigger } = get()
@@ -85,6 +94,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     }
     set({
       drawnPolygon: null,
+      drawnPolygons: [],
       soilImageUrl: null,
       soilImageBounds: null,
       farmlandGeoJSON: null,
@@ -101,6 +111,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     selectedDataset: 'farmland',
     currentBounds: null,
     drawnPolygon: null,
+    drawnPolygons: [],
     currentZoom: 6,
     mapInstance: null,
     drawnItems: null,

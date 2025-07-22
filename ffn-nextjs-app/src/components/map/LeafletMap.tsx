@@ -36,6 +36,8 @@ export default function LeafletMap() {
     farmlandGeoJSON,
     setCurrentBounds,
     setDrawnPolygon,
+    addDrawnPolygon,
+    setDrawnPolygons,
     setCurrentZoom,
     setMapInstance,
     setDrawnItems
@@ -126,7 +128,8 @@ export default function LeafletMap() {
       
       // Convert to GeoJSON and store in state
       const geoJSON = layer.toGeoJSON()
-      setDrawnPolygon(geoJSON.geometry)
+      // Add to polygon array instead of replacing
+      addDrawnPolygon(geoJSON.geometry)
       
       toast.success('Polygon drawn successfully')
     })
@@ -135,6 +138,7 @@ export default function LeafletMap() {
       // Clear all drawn items
       drawnItems.clearLayers()
       setDrawnPolygon(null)
+      setDrawnPolygons([])
       toast.success('Area cleared! You can draw a new area now.')
     })
 

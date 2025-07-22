@@ -45,6 +45,7 @@ export function SoilAnalysis() {
     selectedSoilLayer,
     selectedSoilDepth,
     drawnPolygon,
+    drawnPolygons,
     currentBounds,
     currentZoom,
     setSelectedSoilLayer,
@@ -104,6 +105,28 @@ export function SoilAnalysis() {
       maxLat = Math.max(maxLat, lat)
       minLng = Math.min(minLng, lng)
       maxLng = Math.max(maxLng, lng)
+    })
+    
+    return [[minLat, minLng], [maxLat, maxLng]]
+  }
+
+  // Calculate MBR (Minimum Bounding Rectangle) for multiple polygons
+  const calculateMultiPolygonBounds = (polygons: GeoJSONGeometry[]): [[number, number], [number, number]] | null => {
+    if (!polygons || polygons.length === 0) return null
+    
+    let minLat = Infinity, maxLat = -Infinity
+    let minLng = Infinity, maxLng = -Infinity
+    
+    polygons.forEach((polygon) => {
+      if (polygon && polygon.coordinates && polygon.coordinates[0]) {
+        const coords = polygon.coordinates[0] // First ring of polygon
+        coords.forEach(([lng, lat]: [number, number]) => {
+          minLat = Math.min(minLat, lat)
+          maxLat = Math.max(maxLat, lat)
+          minLng = Math.min(minLng, lng)
+          maxLng = Math.max(maxLng, lng)
+        })
+      }
     })
     
     return [[minLat, minLng], [maxLat, maxLng]]
@@ -248,10 +271,11 @@ export function SoilAnalysis() {
       const imageUrl = URL.createObjectURL(blob)
       setSoilImageUrl(imageUrl)
       
-      // Calculate bounds and set overlay on map
-      if (drawnPolygon) {
-        const bounds = calculatePolygonBounds(drawnPolygon)
+      // Calculate MBR bounds for all polygons and set overlay on map
+      if (drawnPolygons && drawnPolygons.length > 0) {
+        const bounds = calculateMultiPolygonBounds(drawnPolygons)
         if (bounds) {
+          console.log('MBR bounds for soil image:', bounds)
           setSoilImageOverlay(imageUrl, bounds)
         }
       }
@@ -272,7 +296,7 @@ export function SoilAnalysis() {
   })
 
   const handleAnalyze = () => {
-    if (!drawnPolygon) {
+    if (!drawnPolygons || drawnPolygons.length === 0) {
       toast.error('Please draw your farm area on the map first! Use the drawing tools on the map.')
       return
     }
@@ -290,10 +314,22 @@ export function SoilAnalysis() {
       setSoilImageUrl(null)
     }
 
+    // Create geometry - MultiPolygon if multiple polygons, single polygon if one
+    let geometry;
+    if (drawnPolygons.length === 1) {
+      geometry = drawnPolygons[0];
+    } else {
+      // Combine multiple polygons into a MultiPolygon
+      geometry = {
+        type: 'MultiPolygon',
+        coordinates: drawnPolygons.map(polygon => polygon.coordinates)
+      };
+    }
+
     const params = {
       soildepth: isCustomDepth ? `${customDepthRange[0]}-${customDepthRange[1]}` : selectedSoilDepth,
       layer: selectedSoilLayer,
-      geometry: drawnPolygon
+      geometry: geometry
     }
 
     // Clear any farmland overlay when doing polygon analysis
@@ -383,7 +419,7 @@ export function SoilAnalysis() {
       yPosition += 15
 
       // Location details
-      if (drawnPolygon) {
+      if (drawnPolygons && drawnPolygons.length > 0) {
         pdf.setFontSize(12)
         pdf.setFont('helvetica', 'bold')
         pdf.text('Location Information:', 20, yPosition)
@@ -392,33 +428,52 @@ export function SoilAnalysis() {
         pdf.setFontSize(10)
         pdf.setFont('helvetica', 'normal')
 
-        // Calculate polygon bounds and center
-        const coords = drawnPolygon.coordinates[0] as number[][] // First ring of polygon
+        // Calculate overall bounds from all polygons
         let minLat = Infinity, maxLat = -Infinity
         let minLng = Infinity, maxLng = -Infinity
+        let totalApproxArea = 0
         
-        coords.forEach((coord) => {
-          const [lng, lat] = coord
-          minLat = Math.min(minLat, lat)
-          maxLat = Math.max(maxLat, lat)
-          minLng = Math.min(minLng, lng)
-          maxLng = Math.max(maxLng, lng)
+        drawnPolygons.forEach((polygon) => {
+          const coords = polygon.coordinates[0] as number[][] // First ring of polygon
+          
+          coords.forEach((coord) => {
+            const [lng, lat] = coord
+            minLat = Math.min(minLat, lat)
+            maxLat = Math.max(maxLat, lat)
+            minLng = Math.min(minLng, lng)
+            maxLng = Math.max(maxLng, lng)
+          })
+          
+          // Area calculation for this polygon
+          const polyCoords = polygon.coordinates[0] as number[][]
+          let polyMinLat = Infinity, polyMaxLat = -Infinity
+          let polyMinLng = Infinity, polyMaxLng = -Infinity
+          
+          polyCoords.forEach((coord) => {
+            const [lng, lat] = coord
+            polyMinLat = Math.min(polyMinLat, lat)
+            polyMaxLat = Math.max(polyMaxLat, lat)
+            polyMinLng = Math.min(polyMinLng, lng)
+            polyMaxLng = Math.max(polyMaxLng, lng)
+          })
+          
+          const width = polyMaxLng - polyMinLng
+          const height = polyMaxLat - polyMinLat
+          const approxAreaDegrees = width * height
+          const approxAreaKm2 = approxAreaDegrees * 111 * 111 // Very rough conversion
+          totalApproxArea += approxAreaKm2
         })
 
         const centerLat = (minLat + maxLat) / 2
         const centerLng = (minLng + maxLng) / 2
-        
-        // Area calculation (approximate using bounding box)
-        const width = maxLng - minLng
-        const height = maxLat - minLat
-        const approxAreaDegrees = width * height
-        const approxAreaKm2 = approxAreaDegrees * 111 * 111 // Very rough conversion
 
+        pdf.text(`Number of Polygons: ${drawnPolygons.length}`, 20, yPosition)
+        yPosition += 6
         pdf.text(`Center Coordinates: ${centerLat.toFixed(6)}°N, ${centerLng.toFixed(6)}°W`, 20, yPosition)
         yPosition += 6
         pdf.text(`Bounding Box: ${minLat.toFixed(6)}° to ${maxLat.toFixed(6)}°N, ${minLng.toFixed(6)}° to ${maxLng.toFixed(6)}°W`, 20, yPosition)
         yPosition += 6
-        pdf.text(`Approximate Area: ${approxAreaKm2.toFixed(2)} km²`, 20, yPosition)
+        pdf.text(`Total Approximate Area: ${totalApproxArea.toFixed(2)} km²`, 20, yPosition)
         yPosition += 10
 
         // WKT String
@@ -428,8 +483,20 @@ export function SoilAnalysis() {
         yPosition += 6
 
         // Generate WKT string from GeoJSON
-        const wktCoords = coords.map((coord) => `${coord[0]} ${coord[1]}`).join(', ')
-        const wktString = `POLYGON((${wktCoords}))`
+        let wktString
+        if (drawnPolygons.length === 1) {
+          const coords = drawnPolygons[0].coordinates[0] as number[][]
+          const wktCoords = coords.map((coord) => `${coord[0]} ${coord[1]}`).join(', ')
+          wktString = `POLYGON((${wktCoords}))`
+        } else {
+          // MultiPolygon WKT
+          const polygonWkts = drawnPolygons.map((polygon) => {
+            const coords = polygon.coordinates[0] as number[][]
+            const wktCoords = coords.map((coord) => `${coord[0]} ${coord[1]}`).join(', ')
+            return `((${wktCoords}))`
+          }).join(', ')
+          wktString = `MULTIPOLYGON(${polygonWkts})`
+        }
         
         pdf.setFontSize(8)
         pdf.setFont('helvetica', 'normal')
@@ -773,7 +840,7 @@ export function SoilAnalysis() {
         {/* Polygon Analysis Button */}
         <Button
           onClick={handleAnalyze}
-          disabled={!drawnPolygon || soilAnalysisMutation.isPending || soilImageMutation.isPending}
+          disabled={!drawnPolygons || drawnPolygons.length === 0 || soilAnalysisMutation.isPending || soilImageMutation.isPending}
           className="w-full"
         >
           {(soilAnalysisMutation.isPending || soilImageMutation.isPending) ? (
