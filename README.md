@@ -201,6 +201,190 @@ To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soi
       sudo systemctl enable ffn-java ffn-wsgi
       sudo systemctl start ffn-java ffn-wsgi
       ```
+
+## Client Deployment (Next.js Application)
+
+The new Next.js client provides a modern web interface for the FutureFarmNow platform. Follow these steps to deploy it for the first time.
+
+### Prerequisites
+
+- **Node.js 18.17 or later** - [Download](https://nodejs.org/)
+- **npm 9 or later** (comes with Node.js)
+- Web server (Apache/Nginx) or hosting platform (Vercel/Netlify)
+
+### Local Development Setup
+
+1. **Navigate to the client directory**
+   ```bash
+   cd ffn-nextjs-app
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**
+   ```bash
+   cp .env.local.example .env.local
+   # Edit .env.local with your backend API URL
+   ```
+
+4. **Start development server**
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+### Production Deployment
+
+#### Option A: Deploy to Vercel (Recommended)
+
+1. **Install Vercel CLI**
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Deploy to Vercel**
+   ```bash
+   cd ffn-nextjs-app
+   vercel
+   ```
+   Follow the prompts to configure your deployment.
+
+3. **Configure environment variables in Vercel dashboard**
+   - Go to your project settings in Vercel
+   - Add `NEXT_PUBLIC_API_BASE_URL` with your backend server URL
+   - Example: `https://ffn.example.com/futurefarmnow-backend-0.3-RC1`
+
+#### Option B: Deploy to Apache/Nginx
+
+1. **Build the application**
+   ```bash
+   cd ffn-nextjs-app
+   npm run build
+   ```
+
+2. **Export static files** (if using static hosting)
+   ```bash
+   npm run export
+   ```
+
+3. **Copy files to web server**
+   ```bash
+   # For static export
+   sudo cp -r out/* /var/www/ffn.example.com/public_html/
+
+   # For Node.js deployment
+   sudo cp -r .next package.json package-lock.json /var/www/ffn.example.com/client/
+   cd /var/www/ffn.example.com/client
+   npm install --production
+   ```
+
+4. **Configure web server**
+
+   **For Apache (static):**
+   ```apache
+   <VirtualHost *:80>
+       ServerName ffn.example.com
+       DocumentRoot /var/www/ffn.example.com/public_html
+       
+       # Enable client-side routing
+       <Directory /var/www/ffn.example.com/public_html>
+           RewriteEngine On
+           RewriteBase /
+           RewriteRule ^index\.html$ - [L]
+           RewriteCond %{REQUEST_FILENAME} !-f
+           RewriteCond %{REQUEST_FILENAME} !-d
+           RewriteRule . /index.html [L]
+       </Directory>
+   </VirtualHost>
+   ```
+
+   **For Nginx (static):**
+   ```nginx
+   server {
+       listen 80;
+       server_name ffn.example.com;
+       root /var/www/ffn.example.com/public_html;
+       index index.html;
+
+       location / {
+           try_files $uri $uri/ /index.html;
+       }
+   }
+   ```
+
+5. **Set up Node.js service** (if using Node.js deployment)
+   ```bash
+   # Create systemd service file
+   sudo nano /etc/systemd/system/ffn-client.service
+   ```
+   
+   Add the following content:
+   ```ini
+   [Unit]
+   Description=FutureFarmNow Next.js Client
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=www-data
+   Group=www-data
+   WorkingDirectory=/var/www/ffn.example.com/client
+   ExecStart=/usr/bin/npm start
+   Restart=on-failure
+   Environment=NODE_ENV=production
+   Environment=NEXT_PUBLIC_API_BASE_URL=https://ffn.example.com/futurefarmnow-backend-0.3-RC1
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+6. **Enable and start the service**
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable ffn-client
+   sudo systemctl start ffn-client
+   ```
+
+### Configuration
+
+#### Environment Variables
+
+Create a `.env.local` file in the `ffn-nextjs-app` directory:
+
+```bash
+# Backend API Configuration
+NEXT_PUBLIC_API_BASE_URL=https://ffn.example.com/futurefarmnow-backend-0.3-RC1
+
+# Optional: For development with local backend
+# NEXT_PUBLIC_API_BASE_URL=http://localhost:8890
+```
+
+#### API Proxy Configuration
+
+The Next.js application includes API proxy routes to handle CORS issues. These routes are automatically configured to forward requests to your backend server specified in `NEXT_PUBLIC_API_BASE_URL`.
+
+### Troubleshooting
+
+1. **CORS Issues**
+   - The app uses API proxy routes to handle CORS
+   - Ensure your `NEXT_PUBLIC_API_BASE_URL` is correctly configured
+
+2. **Build Errors**
+   - Run `npm run type-check` to identify TypeScript issues
+   - Run `npm run lint` to check for code quality issues
+
+3. **Map Loading Issues**
+   - Check your internet connection for tile loading
+   - Verify Leaflet CSS is properly imported
+
+4. **API Connection Issues**
+   - Verify backend services are running (Java server on port 8890, WSGI on port 8082)
+   - Check environment variable configuration
+   - Test API endpoints directly: `curl https://ffn.example.com/futurefarmnow-backend-0.3-RC1/soil/stats.json`
+
 ### API
 Check the detailed [API description here](doc/api.md).
 
