@@ -209,7 +209,7 @@ Check the [step-by-step instructions for adding a new vector dataset](doc/add-ve
 
 ## License
 
-Copyright 2024 University of California, Riverside
+Copyright 2025 University of California, Riverside
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
