@@ -26,6 +26,7 @@ export default function LeafletMap() {
   const farmlandLayerRef = useRef<L.GeoJSON | null>(null)
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
 
   const { 
     selectedDataset, 
@@ -44,8 +45,116 @@ export default function LeafletMap() {
   } = useMapStore()
 
   const { resolvedTheme } = useTheme()
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
+  // Function to pan to user's location
+  const panToUserLocation = () => {
+    if (!mapInstanceRef.current) return
 
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser')
+      setLocationError('Geolocation not supported')
+      return
+    }
+
+    // Show loading toast
+    const loadingToast = toast.loading('Getting your location...')
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords
+        
+        // Pan and zoom to user's location
+        mapInstanceRef.current?.setView([latitude, longitude], 15)
+        
+        // Add a temporary marker at user's location
+        const userMarker = L.marker([latitude, longitude], {
+          icon: L.divIcon({
+            className: 'user-location-marker',
+            html: `<div style="
+              width: 20px;
+              height: 20px;
+              background-color: #3b82f6;
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              position: relative;
+            ">
+              <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 40px;
+                height: 40px;
+                border: 2px solid #3b82f6;
+                border-radius: 50%;
+                opacity: 0;
+                animation: pulse 2s ease-out infinite;
+              "></div>
+            </div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          })
+        }).addTo(mapInstanceRef.current!)
+        
+        // Add pulse animation CSS if not already added
+        if (!document.getElementById('location-pulse-style')) {
+          const style = document.createElement('style')
+          style.id = 'location-pulse-style'
+          style.textContent = `
+            @keyframes pulse {
+              0% {
+                opacity: 0.8;
+                transform: translate(-50%, -50%) scale(1);
+              }
+              100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(2);
+              }
+            }
+          `
+          document.head.appendChild(style)
+        }
+        
+        // Remove marker after 5 seconds
+        setTimeout(() => {
+          mapInstanceRef.current?.removeLayer(userMarker)
+        }, 5000)
+        
+        // Dismiss loading and show success
+        toast.dismiss(loadingToast)
+        toast.success('Moved to your location')
+        setLocationError(null)
+      },
+      (error) => {
+        toast.dismiss(loadingToast)
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error('Location access denied. Please enable location permissions.')
+            setLocationError('Permission denied')
+            break
+          case error.POSITION_UNAVAILABLE:
+            toast.error('Unable to retrieve your location')
+            setLocationError('Position unavailable')
+            break
+          case error.TIMEOUT:
+            toast.error('Location request timed out')
+            setLocationError('Request timeout')
+            break
+          default:
+            toast.error('An error occurred while getting your location')
+            setLocationError('Unknown error')
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return
@@ -273,18 +382,29 @@ export default function LeafletMap() {
       vectorTileLayer.addTo(mapInstanceRef.current)
       vectorTileLayerRef.current = vectorTileLayer
 
-      // Center map on appropriate state
-      if (selectedDataset === 'farmland') {
-        // California center
-        mapInstanceRef.current.setView([36.7783, -119.4179], 6)
-        toast.success('Loaded California farmland dataset')
-      } else if (selectedDataset === 'AZ_Farmland') {
-        // Arizona center  
-        mapInstanceRef.current.setView([34.0489, -111.0937], 6)
-        toast.success('Loaded Arizona farmland dataset')
+      // Only show toast if not initial load
+      if (!isInitialLoad) {
+        // Center map on appropriate state
+        if (selectedDataset === 'farmland') {
+          // California center
+          mapInstanceRef.current.setView([36.7783, -119.4179], 6)
+          toast.success('Loaded California farmland dataset')
+        } else if (selectedDataset === 'AZ_Farmland') {
+          // Arizona center  
+          mapInstanceRef.current.setView([34.0489, -111.0937], 6)
+          toast.success('Loaded Arizona farmland dataset')
+        }
+      } else {
+        // On initial load, just center the map without toast
+        if (selectedDataset === 'farmland') {
+          mapInstanceRef.current.setView([36.7783, -119.4179], 6)
+        } else if (selectedDataset === 'AZ_Farmland') {
+          mapInstanceRef.current.setView([34.0489, -111.0937], 6)
+        }
+        setIsInitialLoad(false)
       }
     }
-  }, [selectedDataset])
+  }, [selectedDataset, isInitialLoad])
 
   // Handle soil image overlay
   useEffect(() => {
@@ -524,6 +644,40 @@ export default function LeafletMap() {
   return (
     <div className="relative h-full w-full">
       <div ref={mapRef} className="h-full w-full" />
+      
+      {/* Location button */}
+      <button
+        onClick={panToUserLocation}
+        className="absolute top-32 right-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded p-2 shadow-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 group z-[1000]"
+        title="Go to my location"
+        aria-label="Go to my location"
+        style={{ marginTop: '60px' }}
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          className="text-gray-600 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"
+        >
+          <circle cx="12" cy="12" r="3" fill="currentColor" />
+          <path
+            d="M12 2V8M12 16V22M22 12H16M8 12H2"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="2"
+            fill="none"
+          />
+        </svg>
+      </button>
       
       {/* Map attribution */}
       <div className="absolute bottom-2 right-2 bg-background/90 border px-2 py-1 text-xs rounded text-muted-foreground">

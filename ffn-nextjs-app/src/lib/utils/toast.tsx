@@ -60,4 +60,10 @@ export const toast = {
       }
     )
   },
+  loading: (message: string) => {
+    return hotToast.loading(message)
+  },
+  dismiss: (toastId?: string) => {
+    return hotToast.dismiss(toastId)
+  },
 }
