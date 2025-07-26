@@ -29,18 +29,50 @@ export function NDVIAnalysis() {
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
   const [isCustomDate, setIsCustomDate] = useState(false)
 
-  // Initialize year-based date range on component mount
+  // Initialize year-based date range on component mount (only if no custom dates from URL)
   useEffect(() => {
     if (!isCustomDate) {
-      const year = selectedYear
-      const dateRange = {
-        from: `${year}-01-01`,
-        to: `${year}-12-31`
+      // Get URL state to check if dates were provided via URL
+      const urlParams = new URLSearchParams(window.location.search)
+      const hasURLDates = urlParams.has('dateFrom') && urlParams.has('dateTo')
+      
+      // If URL dates were provided, extract the year and update selectedYear
+      if (hasURLDates) {
+        const urlDateFrom = urlParams.get('dateFrom')
+        if (urlDateFrom) {
+          const urlYear = new Date(urlDateFrom).getFullYear().toString()
+          console.log('URL dates detected, updating selectedYear to:', urlYear)
+          setSelectedYear(urlYear)
+          
+          // Check if it's a full year range or custom date range
+          const urlDateTo = urlParams.get('dateTo')
+          const isFullYear = urlDateFrom === `${urlYear}-01-01` && urlDateTo === `${urlYear}-12-31`
+          
+          if (!isFullYear) {
+            setIsCustomDate(true)
+            console.log('URL dates are custom range, switching to custom mode')
+          }
+        }
+        return
       }
-      console.log('Initializing year-based date range on mount:', { year, dateRange })
-      setSelectedDateRange(dateRange)
+      
+      // Check if we already have URL-provided dates, if so don't override them
+      const currentDateRange = selectedDateRange
+      const isCurrentYear = currentDateRange.from === `${selectedYear}-01-01` && 
+                           currentDateRange.to === `${selectedYear}-12-31`
+      
+      // Only set year-based range if current range is default OR matches current selected year
+      if (isCurrentYear || (currentDateRange.from === '2024-01-01' && currentDateRange.to === '2024-12-31')) {
+        const year = selectedYear
+        const dateRange = {
+          from: `${year}-01-01`,
+          to: `${year}-12-31`
+        }
+        console.log('Initializing year-based date range on mount:', { year, dateRange })
+        setSelectedDateRange(dateRange)
+      }
     }
-  }, [selectedYear, isCustomDate, setSelectedDateRange]) // Include dependencies
+  }, [selectedYear, isCustomDate, setSelectedDateRange])
 
   // Clear state when clearTrigger changes
   useEffect(() => {
@@ -477,7 +509,7 @@ export function NDVIAnalysis() {
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-baseline gap-4">
+          <div className="flex items-baseline gap-4" data-tutorial="date-selector">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
               Time Period
             </label>
@@ -572,7 +604,7 @@ export function NDVIAnalysis() {
       </div>
 
       {/* Analysis Buttons */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-tutorial="ndvi-analysis-buttons">
         {/* Polygon Analysis Button */}
         <div>
           <Button
@@ -599,6 +631,7 @@ export function NDVIAnalysis() {
               disabled={analyzingType === 'polygon'}
               variant="outline"
               className={`w-full transition-opacity ${analyzingType === 'polygon' ? 'opacity-50' : ''}`}
+              data-tutorial="analyze-ndvi-farmland-button"
             >
               {analyzingType === 'farmland' ? (
                 <>

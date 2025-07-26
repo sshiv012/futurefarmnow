@@ -7,7 +7,7 @@ import { Slider } from '@/components/ui/slider'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useMutation } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
-import { SoilLayerEnum } from '@/lib/types/api'
+import { SoilLayerEnum, GeoJSONGeometry } from '@/lib/types/api'
 import { BoxWhiskerPlot } from '@/components/visualizations/BoxWhiskerPlot'
 import { Legend } from '@/components/visualizations/Legend'
 import { SoilLegend } from '@/components/visualizations/SoilLegend'
@@ -79,6 +79,26 @@ export function SoilAnalysis() {
     }
   }, [clearTrigger])
 
+  // Initialize custom depth state from selectedSoilDepth URL parameter
+  useEffect(() => {
+    // Check if selectedSoilDepth is a custom format (not in predefined list)
+    const predefinedDepths = ['0-5', '5-15', '15-30', '30-60', '60-100', '100-200']
+    
+    if (selectedSoilDepth && !predefinedDepths.includes(selectedSoilDepth)) {
+      // Parse custom depth format like "10-45"
+      const match = selectedSoilDepth.match(/^(\d+)-(\d+)$/)
+      if (match) {
+        const start = parseInt(match[1])
+        const end = parseInt(match[2])
+        setCustomDepthRange([start, end])
+        setIsCustomDepth(true)
+      }
+    } else {
+      // Reset to default if it's a predefined depth
+      setIsCustomDepth(false)
+    }
+  }, [selectedSoilDepth])
+
   // Handle custom depth range changes with validation
   const handleCustomDepthChange = (values: number[]) => {
     const [start, end] = values
@@ -90,6 +110,10 @@ export function SoilAnalysis() {
     const constrainedEnd = Math.max(end, constrainedStart + 5) // Minimum 5cm gap
     
     setCustomDepthRange([constrainedStart, constrainedEnd])
+    
+    // Update global store with custom depth string for URL sync
+    const customDepthString = `${constrainedStart}-${constrainedEnd}`
+    setSelectedSoilDepth(customDepthString)
   }
 
   // Calculate bounds from drawn polygon
@@ -118,14 +142,16 @@ export function SoilAnalysis() {
     let minLng = Infinity, maxLng = -Infinity
     
     polygons.forEach((polygon) => {
-      if (polygon && polygon.coordinates && polygon.coordinates[0]) {
-        const coords = polygon.coordinates[0] // First ring of polygon
-        coords.forEach(([lng, lat]: [number, number]) => {
-          minLat = Math.min(minLat, lat)
-          maxLat = Math.max(maxLat, lat)
-          minLng = Math.min(minLng, lng)
-          maxLng = Math.max(maxLng, lng)
-        })
+      if (polygon && polygon.coordinates && Array.isArray(polygon.coordinates) && polygon.coordinates[0]) {
+        const coords = polygon.coordinates[0] as [number, number][] // First ring of polygon
+        if (Array.isArray(coords)) {
+          coords.forEach(([lng, lat]: [number, number]) => {
+            minLat = Math.min(minLat, lat)
+            maxLat = Math.max(maxLat, lat)
+            minLng = Math.min(minLng, lng)
+            maxLng = Math.max(maxLng, lng)
+          })
+        }
       }
     })
     
@@ -739,6 +765,7 @@ export function SoilAnalysis() {
             <Select
               value={selectedSoilLayer}
               onChange={(e) => setSelectedSoilLayer(e.target.value as SoilLayerEnum)}
+              data-tutorial="soil-layer-selector"
             >
               {SOIL_LAYERS.map(layer => (
                 <SelectOption key={layer.value} value={layer.value} title={layer.description}>
@@ -765,6 +792,7 @@ export function SoilAnalysis() {
                   setSelectedSoilDepth(e.target.value)
                 }
               }}
+              data-tutorial="soil-depth-selector"
             >
               {SOIL_DEPTHS.map(depth => (
                 <SelectOption key={depth.value} value={depth.value} title={depth.description}>
@@ -836,12 +864,13 @@ export function SoilAnalysis() {
       </div>
 
       {/* Analysis Buttons */}
-      <div className="space-y-3">
+      <div className="space-y-3" data-tutorial="soil-analysis-buttons">
         {/* Polygon Analysis Button */}
         <Button
           onClick={handleAnalyze}
           disabled={!drawnPolygons || drawnPolygons.length === 0 || soilAnalysisMutation.isPending || soilImageMutation.isPending}
           className="w-full"
+          data-tutorial="analyze-soil-button"
         >
           {(soilAnalysisMutation.isPending || soilImageMutation.isPending) ? (
             <>
@@ -863,6 +892,7 @@ export function SoilAnalysis() {
             disabled={farmlandAnalysisMutation.isPending}
             variant="outline"
             className="w-full"
+            data-tutorial="analyze-farmland-button"
           >
             {farmlandAnalysisMutation.isPending ? (
               <>

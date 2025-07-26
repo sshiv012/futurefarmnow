@@ -8,6 +8,7 @@ interface MapState {
   drawnPolygon: GeoJSONGeometry | null
   drawnPolygons: GeoJSONGeometry[] // Array to store multiple polygons
   currentZoom: number
+  currentCenter: [number, number] | null
   mapInstance: L.Map | null
   drawnItems: L.FeatureGroup | null
   soilImageUrl: string | null
@@ -32,6 +33,7 @@ interface MapState {
   addDrawnPolygon: (polygon: GeoJSONGeometry) => void
   setDrawnPolygons: (polygons: GeoJSONGeometry[]) => void
   setCurrentZoom: (zoom: number) => void
+  setCurrentCenter: (center: [number, number] | null) => void
   setMapInstance: (map: L.Map | null) => void
   setDrawnItems: (drawnItems: L.FeatureGroup | null) => void
   setSoilImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
@@ -52,6 +54,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   drawnPolygon: null,
   drawnPolygons: [],
   currentZoom: 6,
+  currentCenter: null,
   mapInstance: null,
   drawnItems: null,
   soilImageUrl: null,
@@ -76,6 +79,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   })),
   setDrawnPolygons: (polygons) => set({ drawnPolygons: polygons }),
   setCurrentZoom: (zoom) => set({ currentZoom: zoom }),
+  setCurrentCenter: (center) => set({ currentCenter: center }),
   setMapInstance: (map) => set({ mapInstance: map }),
   setDrawnItems: (drawnItems) => set({ drawnItems }),
   setSoilImageOverlay: (url, bounds) => set({ soilImageUrl: url, soilImageBounds: bounds }),
@@ -113,6 +117,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     drawnPolygon: null,
     drawnPolygons: [],
     currentZoom: 6,
+    currentCenter: null,
     mapInstance: null,
     drawnItems: null,
     soilImageUrl: null,

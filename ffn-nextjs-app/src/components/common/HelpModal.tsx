@@ -2,7 +2,8 @@
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { X, HelpCircle } from 'lucide-react'
+import { X, HelpCircle, BookOpen } from 'lucide-react'
+import { useTutorial } from '@/lib/contexts/TutorialContext'
 
 interface HelpModalProps {
   isOpen: boolean
@@ -10,7 +11,14 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ isOpen, onClose }: HelpModalProps) {
+  const { startTutorial } = useTutorial()
+  
   if (!isOpen) return null
+
+  const handleStartTutorial = () => {
+    onClose()
+    startTutorial()
+  }
 
   return (
     <div className="fixed inset-0 z-[9999]">
@@ -40,6 +48,24 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             </div>
             
             <div className="space-y-6">
+              {/* Interactive Tutorial Section */}
+              <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 p-4 rounded-lg border-l-4 border-blue-400">
+                <h4 className="font-semibold text-foreground mb-3 flex items-center">
+                  <BookOpen className="h-5 w-5 mr-2 text-blue-600" />
+                  New to FutureFarmNow? 
+                </h4>
+                <p className="text-muted-foreground mb-4">
+                  Take our interactive tutorial! We'll guide you step-by-step through analyzing your farm's soil and crop health.
+                </p>
+                <Button 
+                  onClick={handleStartTutorial}
+                  className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
+                >
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Start Interactive Tutorial
+                </Button>
+              </div>
+
               <div>
                 <h4 className="font-semibold text-foreground mb-3 flex items-center">
                   🗺️ Drawing Your Farm Area:

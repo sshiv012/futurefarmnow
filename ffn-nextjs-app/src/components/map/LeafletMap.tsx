@@ -27,10 +27,14 @@ export default function LeafletMap() {
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const isUpdatingFromURL = useRef(false)
+  const hasCheckedURLCoordinates = useRef(false)
 
   const { 
     selectedDataset, 
     currentBounds, 
+    currentCenter,
+    currentZoom,
     drawnPolygon,
     soilImageUrl,
     soilImageBounds,
@@ -40,6 +44,7 @@ export default function LeafletMap() {
     addDrawnPolygon,
     setDrawnPolygons,
     setCurrentZoom,
+    setCurrentCenter,
     setMapInstance,
     setDrawnItems
   } = useMapStore()
@@ -165,6 +170,7 @@ export default function LeafletMap() {
       zoom: 6,
       zoomControl: true,
     })
+    
 
     // Initialize with light theme tiles
     const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -277,16 +283,25 @@ export default function LeafletMap() {
       toast.info('Drag the corners to adjust your area, then click Save to confirm.')
     })
 
-    // Handle map movement to update bounds and zoom
+    // Handle map movement to update bounds, zoom, and center
     map.on('moveend zoomend', () => {
+      // Don't update store if we're in the middle of applying URL state
+      if (isUpdatingFromURL.current) {
+        return
+      }
+      
       const bounds = map.getBounds()
+      const center = map.getCenter()
+      const zoom = map.getZoom()
+      
       setCurrentBounds({
         minx: bounds.getWest(),
         miny: bounds.getSouth(),
         maxx: bounds.getEast(),
         maxy: bounds.getNorth(),
       })
-      setCurrentZoom(map.getZoom())
+      setCurrentZoom(zoom)
+      setCurrentCenter([center.lat, center.lng])
     })
 
     mapInstanceRef.current = map
@@ -319,7 +334,32 @@ export default function LeafletMap() {
         mapInstanceRef.current = null
       }
     }
-  }, [])
+  }, [setCurrentBounds, setCurrentZoom, setCurrentCenter, setDrawnPolygon, addDrawnPolygon, setDrawnPolygons, setMapInstance, setDrawnItems])
+
+  // Sync map position with URL state (only when currentCenter or currentZoom changes from URL)
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+    
+    // Handle center and zoom updates separately
+    const mapCenter = mapInstanceRef.current.getCenter()
+    const mapZoom = mapInstanceRef.current.getZoom()
+    
+    // Check what needs to be updated
+    const centerChanged = currentCenter && (Math.abs(mapCenter.lat - currentCenter[0]) > 0.00001 || 
+                                           Math.abs(mapCenter.lng - currentCenter[1]) > 0.00001)
+    const zoomChanged = currentZoom !== undefined && currentZoom !== null && 
+                       Math.abs(mapZoom - currentZoom) > 0.1
+    
+    if (centerChanged || zoomChanged) {
+      // Use URL values if available, otherwise keep current map values
+      const targetCenter = currentCenter || [mapCenter.lat, mapCenter.lng]
+      const targetZoom = currentZoom !== undefined && currentZoom !== null ? currentZoom : mapZoom
+      
+      isUpdatingFromURL.current = true
+      mapInstanceRef.current.setView(targetCenter, targetZoom)
+      setTimeout(() => { isUpdatingFromURL.current = false }, 100)
+    }
+  }, [currentCenter, currentZoom])
 
   // Update tile layer when theme changes
   useEffect(() => {
@@ -382,24 +422,36 @@ export default function LeafletMap() {
       vectorTileLayer.addTo(mapInstanceRef.current)
       vectorTileLayerRef.current = vectorTileLayer
 
-      // Only show toast if not initial load
+      // Only show toast and center map if not initial load
       if (!isInitialLoad) {
-        // Center map on appropriate state
+        // Check if we should center map (only if no URL coordinates were ever provided)
+        if (!hasCheckedURLCoordinates.current) {
+          hasCheckedURLCoordinates.current = true
+          // Check current store state for URL coordinates
+          if (!currentCenter && !currentZoom) {
+            if (selectedDataset === 'farmland') {
+              mapInstanceRef.current.setView([36.7783, -119.4179], 6)
+            } else if (selectedDataset === 'AZ_Farmland') {
+              mapInstanceRef.current.setView([34.0489, -111.0937], 6)
+            }
+          }
+        }
+        
+        // Always show toast when dataset changes (but not on zoom changes)
         if (selectedDataset === 'farmland') {
-          // California center
-          mapInstanceRef.current.setView([36.7783, -119.4179], 6)
           toast.success('Loaded California farmland dataset')
         } else if (selectedDataset === 'AZ_Farmland') {
-          // Arizona center  
-          mapInstanceRef.current.setView([34.0489, -111.0937], 6)
           toast.success('Loaded Arizona farmland dataset')
         }
       } else {
-        // On initial load, just center the map without toast
-        if (selectedDataset === 'farmland') {
-          mapInstanceRef.current.setView([36.7783, -119.4179], 6)
-        } else if (selectedDataset === 'AZ_Farmland') {
-          mapInstanceRef.current.setView([34.0489, -111.0937], 6)
+        // On initial load, check URL coordinates once
+        hasCheckedURLCoordinates.current = true
+        if (!currentCenter && !currentZoom) {
+          if (selectedDataset === 'farmland') {
+            mapInstanceRef.current.setView([36.7783, -119.4179], 6)
+          } else if (selectedDataset === 'AZ_Farmland') {
+            mapInstanceRef.current.setView([34.0489, -111.0937], 6)
+          }
         }
         setIsInitialLoad(false)
       }
@@ -652,6 +704,7 @@ export default function LeafletMap() {
         title="Go to my location"
         aria-label="Go to my location"
         style={{ marginTop: '60px' }}
+        data-tutorial="location-button"
       >
         <svg
           width="20"

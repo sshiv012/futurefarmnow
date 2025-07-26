@@ -4,16 +4,23 @@ import { useState } from 'react'
 import { MapContainer } from '@/components/map/MapContainer'
 import { Sidebar } from '@/components/panels/Sidebar'
 import { HelpModal } from '@/components/common/HelpModal'
+import { TutorialOverlay, TutorialBodyClass } from '@/components/tutorial/TutorialOverlay'
 import { Button } from '@/components/ui/button'
 import { Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { toast } from '@/lib/utils/toast'
+import { useURLSync } from '@/hooks/useURLSync'
+import { useTutorial } from '@/lib/contexts/TutorialContext'
 
 export function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [helpModalOpen, setHelpModalOpen] = useState(false)
   const { clearArea, clearAllAnalysis } = useMapStore()
+  const { startTutorial } = useTutorial()
+  
+  // Initialize URL synchronization
+  useURLSync()
 
   const handleClearArea = () => {
     clearArea()
@@ -26,7 +33,10 @@ export function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-background main-container" data-tutorial="main-container">
+      {/* Tutorial system */}
+      <TutorialOverlay />
+      <TutorialBodyClass />
       {/* Mobile menu button */}
       <div className="fixed top-4 left-4 z-50 md:hidden">
         <Button
@@ -50,6 +60,7 @@ export function MainLayout() {
           onClose={() => setSidebarOpen(false)}
           onShowHelp={() => setHelpModalOpen(true)}
           onClearAnalysis={handleClearAnalysis}
+          onStartTutorial={startTutorial}
         />
       </aside>
 
@@ -62,7 +73,7 @@ export function MainLayout() {
       )}
 
       {/* Main content - Map */}
-      <main className="flex-1 relative">
+      <main className="flex-1 relative" data-tutorial="map-container">
         <MapContainer />
       </main>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2 } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -17,9 +17,10 @@ interface SidebarProps {
   onClose?: () => void
   onShowHelp?: () => void
   onClearAnalysis?: () => void
+  onStartTutorial?: () => void
 }
 
-export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) {
+export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial }: SidebarProps) {
   const { activeTab, setActiveTab, drawnPolygon } = useMapStore()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -41,7 +42,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) 
             </h1>
           )}
         </div>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1" data-tutorial="sidebar-controls">
           {!isCollapsed && <ThemeToggle />}
           
           {/* Desktop expand toggle */}
@@ -116,6 +117,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) 
               size="sm"
               onClick={onShowHelp}
               className="flex-1 text-sm"
+              data-tutorial="help-button"
             >
               <HelpCircle className="h-4 w-4 mr-2" />
               Help
@@ -131,6 +133,17 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) 
               Clear Analysis
             </Button>
           </div>
+          
+          {/* Tutorial Button */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={onStartTutorial}
+            className="w-full text-sm bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
+          >
+            <BookOpen className="h-4 w-4 mr-2" />
+            Start Tutorial
+          </Button>
         </div>
       )}
 
@@ -185,13 +198,13 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) 
       ) : (
         <>
           {/* Dataset Selection */}
-          <div className="p-4 border-b bg-muted/50">
+          <div className="p-4 border-b bg-muted/50" data-tutorial="dataset-selector">
             <DatasetSelector />
           </div>
 
           {/* Analysis Tabs */}
           <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b" data-tutorial="analysis-tabs">
               <Tabs className="w-full">
                 <TabsList className="grid grid-cols-2 w-full">
                   <TabsTrigger
@@ -225,11 +238,11 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis }: SidebarProps) 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto">
               <Tabs>
-                <TabsContent value="soil" active={activeTab === 'soil'}>
+                <TabsContent value="soil" active={activeTab === 'soil'} data-tutorial="soil-panel">
                   <SoilAnalysis />
                 </TabsContent>
                 
-                <TabsContent value="ndvi" active={activeTab === 'ndvi'}>
+                <TabsContent value="ndvi" active={activeTab === 'ndvi'} data-tutorial="ndvi-panel">
                   <NDVIAnalysis />
                 </TabsContent>
                 
