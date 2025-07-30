@@ -26,53 +26,7 @@ export function NDVIAnalysis() {
   const [analyzingType, setAnalyzingType] = useState<'polygon' | 'farmland' | null>(null)
   const [comparisonYear, setComparisonYear] = useState<string>('')
   const [isComparison, setIsComparison] = useState(false)
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString())
-  const [isCustomDate, setIsCustomDate] = useState(false)
 
-  // Initialize year-based date range on component mount (only if no custom dates from URL)
-  useEffect(() => {
-    if (!isCustomDate) {
-      // Get URL state to check if dates were provided via URL
-      const urlParams = new URLSearchParams(window.location.search)
-      const hasURLDates = urlParams.has('dateFrom') && urlParams.has('dateTo')
-      
-      // If URL dates were provided, extract the year and update selectedYear
-      if (hasURLDates) {
-        const urlDateFrom = urlParams.get('dateFrom')
-        if (urlDateFrom) {
-          const urlYear = new Date(urlDateFrom).getFullYear().toString()
-          console.log('URL dates detected, updating selectedYear to:', urlYear)
-          setSelectedYear(urlYear)
-          
-          // Check if it's a full year range or custom date range
-          const urlDateTo = urlParams.get('dateTo')
-          const isFullYear = urlDateFrom === `${urlYear}-01-01` && urlDateTo === `${urlYear}-12-31`
-          
-          if (!isFullYear) {
-            setIsCustomDate(true)
-            console.log('URL dates are custom range, switching to custom mode')
-          }
-        }
-        return
-      }
-      
-      // Check if we already have URL-provided dates, if so don't override them
-      const currentDateRange = selectedDateRange
-      const isCurrentYear = currentDateRange.from === `${selectedYear}-01-01` && 
-                           currentDateRange.to === `${selectedYear}-12-31`
-      
-      // Only set year-based range if current range is default OR matches current selected year
-      if (isCurrentYear || (currentDateRange.from === '2024-01-01' && currentDateRange.to === '2024-12-31')) {
-        const year = selectedYear
-        const dateRange = {
-          from: `${year}-01-01`,
-          to: `${year}-12-31`
-        }
-        console.log('Initializing year-based date range on mount:', { year, dateRange })
-        setSelectedDateRange(dateRange)
-      }
-    }
-  }, [selectedYear, isCustomDate, setSelectedDateRange])
 
   // Clear state when clearTrigger changes
   useEffect(() => {
@@ -82,8 +36,6 @@ export function NDVIAnalysis() {
       setAnalyzingType(null)
       setComparisonYear('')
       setIsComparison(false)
-      setSelectedYear(new Date().getFullYear().toString())
-      setIsCustomDate(false)
     }
   }, [clearTrigger])
 
@@ -131,8 +83,6 @@ export function NDVIAnalysis() {
       geometry: drawnPolygon
     }
     console.log('NDVI Analysis Params:', { 
-      selectedYear, 
-      isCustomDate, 
       from: params.from, 
       to: params.to,
       selectedDateRange 
@@ -159,8 +109,6 @@ export function NDVIAnalysis() {
       isFarmlandAnalysis: true
     }
     console.log('NDVI Farmland Analysis Params:', { 
-      selectedYear, 
-      isCustomDate, 
       from: params.from, 
       to: params.to,
       selectedDateRange 
@@ -172,33 +120,25 @@ export function NDVIAnalysis() {
   const handleCompareYear = () => {
     if (!comparisonYear || !results) return
     
-    let comparisonFrom: string
-    let comparisonTo: string
+    // For date ranges, try to match the same time period in the comparison year
+    const fromDate = new Date(selectedDateRange.from)
+    const toDate = new Date(selectedDateRange.to)
     
-    if (isCustomDate) {
-      // For custom date ranges, try to match the same time period in the comparison year
-      const fromDate = new Date(selectedDateRange.from)
-      const toDate = new Date(selectedDateRange.to)
-      
-      comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
-      comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
-    } else {
-      // For year-based selection, compare full years
-      comparisonFrom = `${comparisonYear}-01-01`
-      comparisonTo = `${comparisonYear}-12-31`
-    }
+    const comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
+    const comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
+    
+    const currentYear = new Date(selectedDateRange.from).getFullYear().toString()
     
     console.log('Comparison dates:', { 
       comparisonYear, 
-      isCustomDate, 
-      selectedYear,
+      currentYear,
       selectedDateRange,
       comparisonFrom, 
       comparisonTo 
     })
     
     setAnalyzingType('polygon')
-    toast(`Comparing ${selectedYear} with ${comparisonYear}...`, { icon: '⏳' })
+    toast(`Comparing ${currentYear} with ${comparisonYear}...`, { icon: '⏳' })
     
     // Create a separate mutation for comparison
     if (drawnPolygon) {
@@ -240,6 +180,70 @@ export function NDVIAnalysis() {
     }
   }
 
+  const handleExportCSV = () => {
+    if (!results || results.length === 0) {
+      toast.error('No data to export')
+      return
+    }
+
+    try {
+      toast('Generating CSV file...', { icon: '⏳' })
+      
+      let csvContent = 'Date,NDVI Value,Health Status'
+      
+      // Add comparison header if available
+      if (isComparison && comparisonResults) {
+        csvContent = `Date,${new Date(selectedDateRange.from).getFullYear()} NDVI,${comparisonYear} NDVI,Difference,${new Date(selectedDateRange.from).getFullYear()} Health Status,${comparisonYear} Health Status`
+      }
+      
+      csvContent += '\n'
+      
+      if (isComparison && comparisonResults) {
+        // Export comparison data
+        results.forEach((point: any) => {
+          const pointDate = new Date(point.date)
+          const pointMonthDay = `${String(pointDate.getMonth() + 1).padStart(2, '0')}-${String(pointDate.getDate()).padStart(2, '0')}`
+          
+          const compPoint = comparisonResults.find((comp: any) => {
+            const compDate = new Date(comp.date)
+            const compMonthDay = `${String(compDate.getMonth() + 1).padStart(2, '0')}-${String(compDate.getDate()).padStart(2, '0')}`
+            return compMonthDay === pointMonthDay
+          })
+          
+          const primaryHealth = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
+          const comparisonHealth = compPoint ? (compPoint.mean > 0.5 ? 'Excellent' : compPoint.mean > 0.2 ? 'Good' : 'Poor') : 'N/A'
+          const difference = compPoint ? (point.mean - compPoint.mean).toFixed(3) : 'N/A'
+          const comparisonValue = compPoint ? compPoint.mean.toFixed(3) : 'N/A'
+          
+          csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${comparisonValue},${difference},${primaryHealth},${comparisonHealth}\n`
+        })
+      } else {
+        // Export single period data
+        results.forEach((point: any) => {
+          const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
+          csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${healthStatus}\n`
+        })
+      }
+      
+      // Create and download the file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `ndvi-data-${selectedDateRange.from}-to-${selectedDateRange.to}-${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      toast.success('CSV file exported successfully!')
+    } catch (error) {
+      console.error('CSV export error:', error)
+      toast.error('Failed to export CSV file')
+    }
+  }
+
   const handleExportPDF = async () => {
     if (!results || results.length === 0) {
       toast.error('No data to export')
@@ -266,13 +270,11 @@ export function NDVIAnalysis() {
       // Analysis details
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'normal')
-      pdf.text(`Analysis Period: ${isCustomDate ? `${selectedDateRange.from} to ${selectedDateRange.to}` : `Full year ${selectedYear}`}`, 20, yPosition)
+      pdf.text(`Analysis Period: ${selectedDateRange.from} to ${selectedDateRange.to}`, 20, yPosition)
       yPosition += 8
       pdf.text(`Analysis Date: ${new Date().toLocaleDateString()}`, 20, yPosition)
       yPosition += 8
-      const totalDays = isCustomDate 
-        ? Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))
-        : 365
+      const totalDays = Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))
       pdf.text(`Duration: ${totalDays} days`, 20, yPosition)
       yPosition += 8
       pdf.text(`Data Points: ${results.length} measurements`, 20, yPosition)
@@ -328,7 +330,7 @@ export function NDVIAnalysis() {
       pdf.setFont('helvetica', 'normal')
       
       // Primary period statistics
-      const primaryPeriod = isComparison ? selectedYear : `${selectedDateRange.from} to ${selectedDateRange.to}`
+      const primaryPeriod = isComparison ? new Date(selectedDateRange.from).getFullYear().toString() : `${selectedDateRange.from} to ${selectedDateRange.to}`
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'bold')
       pdf.text(`${primaryPeriod} Statistics:`, 25, yPosition)
@@ -407,14 +409,23 @@ export function NDVIAnalysis() {
       if (isComparison && comparisonResults) {
         // Table header for comparison
         pdf.text('Date', 25, yPosition)
-        pdf.text(`${selectedYear}`, 75, yPosition)
+        pdf.text(`${new Date(selectedDateRange.from).getFullYear()}`, 75, yPosition)
         pdf.text(`${comparisonYear}`, 110, yPosition)
         pdf.text('Difference', 145, yPosition)
         yPosition += 7
         
         // Create a merged dataset for comparison table
-        const mergedData = results.slice(0, 15).map((point: any) => {
-          const compPoint = comparisonResults.find((comp: any) => comp.date === point.date)
+        const mergedData = results.map((point: any) => {
+          // Match dates by month-day, not exact date (since years are different)
+          const pointDate = new Date(point.date)
+          const pointMonthDay = `${String(pointDate.getMonth() + 1).padStart(2, '0')}-${String(pointDate.getDate()).padStart(2, '0')}`
+          
+          const compPoint = comparisonResults.find((comp: any) => {
+            const compDate = new Date(comp.date)
+            const compMonthDay = `${String(compDate.getMonth() + 1).padStart(2, '0')}-${String(compDate.getDate()).padStart(2, '0')}`
+            return compMonthDay === pointMonthDay
+          })
+          
           return {
             date: point.date,
             current: point.mean,
@@ -440,11 +451,6 @@ export function NDVIAnalysis() {
           }
           yPosition += 6
         })
-        
-        if (results.length > 15) {
-          yPosition += 5
-          pdf.text(`... and ${results.length - 15} more measurements`, 25, yPosition)
-        }
       } else {
         // Table header for single period
         pdf.text('Date', 25, yPosition)
@@ -453,7 +459,7 @@ export function NDVIAnalysis() {
         yPosition += 7
         
         // Table data
-        results.slice(0, 20).forEach((point: any) => {
+        results.forEach((point: any) => {
           if (yPosition > pageHeight - 20) {
             pdf.addPage()
             yPosition = 20
@@ -465,11 +471,6 @@ export function NDVIAnalysis() {
           pdf.text(healthStatus, 130, yPosition)
           yPosition += 6
         })
-        
-        if (results.length > 20) {
-          yPosition += 5
-          pdf.text(`... and ${results.length - 20} more measurements`, 25, yPosition)
-        }
       }
       
       // Footer
@@ -511,68 +512,31 @@ export function NDVIAnalysis() {
         <div className="space-y-4">
           <div className="flex items-baseline gap-4" data-tutorial="date-selector">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
-              Time Period
+              Start Date
             </label>
-            <select
-              value={isCustomDate ? 'custom' : selectedYear}
-              onChange={(e) => {
-                if (e.target.value === 'custom') {
-                  setIsCustomDate(true)
-                  console.log('Switched to custom date mode')
-                } else {
-                  setIsCustomDate(false)
-                  setSelectedYear(e.target.value)
-                  // Set date range to full year
-                  const year = e.target.value
-                  const dateRange = {
-                    from: `${year}-01-01`,
-                    to: `${year}-12-31`
-                  }
-                  console.log('Setting year-based date range:', { year, dateRange })
-                  setSelectedDateRange(dateRange)
-                }
-              }}
-              className="flex-1 h-10 px-3 py-2 border border-input bg-background text-sm rounded-md"
-            >
-              {/* Generate years from 2015 to current year */}
-              {Array.from({ length: new Date().getFullYear() - 2014 }, (_, i) => 2015 + i).reverse().map(year => (
-                <option key={year} value={year.toString()}>{year}</option>
-              ))}
-              <option value="custom">Custom Date Range</option>
-            </select>
+            <Input
+              type="date"
+              value={selectedDateRange.from}
+              onChange={(e) => handleDateChange('from', e.target.value)}
+              max={selectedDateRange.to}
+              className="flex-1"
+              style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
+            />
           </div>
           
-          {isCustomDate && (
-            <>
-              <div className="flex items-baseline gap-4">
-                <label className="text-sm font-medium text-foreground w-20 shrink-0">
-                  Start Date
-                </label>
-                <Input
-                  type="date"
-                  value={selectedDateRange.from}
-                  onChange={(e) => handleDateChange('from', e.target.value)}
-                  max={selectedDateRange.to}
-                  className="flex-1"
-                  style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
-                />
-              </div>
-              
-              <div className="flex items-baseline gap-4">
-                <label className="text-sm font-medium text-foreground w-20 shrink-0">
-                  End Date
-                </label>
-                <Input
-                  type="date"
-                  value={selectedDateRange.to}
-                  onChange={(e) => handleDateChange('to', e.target.value)}
-                  min={selectedDateRange.from}
-                  className="flex-1"
-                  style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
-                />
-              </div>
-            </>
-          )}
+          <div className="flex items-baseline gap-4">
+            <label className="text-sm font-medium text-foreground w-20 shrink-0">
+              End Date
+            </label>
+            <Input
+              type="date"
+              value={selectedDateRange.to}
+              onChange={(e) => handleDateChange('to', e.target.value)}
+              min={selectedDateRange.from}
+              className="flex-1"
+              style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
+            />
+          </div>
         </div>
 
         {/* Date range info */}
@@ -580,26 +544,13 @@ export function NDVIAnalysis() {
           <p className="font-medium text-foreground">
             Selected time period:
           </p>
-          {isCustomDate ? (
-            <>
-              <p className="text-muted-foreground mt-1">
-                From {new Date(selectedDateRange.from).toLocaleDateString()} to{' '}
-                {new Date(selectedDateRange.to).toLocaleDateString()}
-              </p>
-              <p className="text-muted-foreground">
-                Total days: {Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-muted-foreground mt-1">
-                Full year {selectedYear}
-              </p>
-              <p className="text-muted-foreground">
-                Duration: 365 days (January 1 - December 31, {selectedYear})
-              </p>
-            </>
-          )}
+          <p className="text-muted-foreground mt-1">
+            From {new Date(selectedDateRange.from).toLocaleDateString()} to{' '}
+            {new Date(selectedDateRange.to).toLocaleDateString()}
+          </p>
+          <p className="text-muted-foreground">
+            Total days: {Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))}
+          </p>
         </div>
       </div>
 
@@ -702,60 +653,58 @@ export function NDVIAnalysis() {
                 data={results} 
                 comparisonData={comparisonResults}
                 showComparison={isComparison}
-                primaryLabel={isComparison ? selectedYear : undefined}
+                primaryLabel={isComparison ? new Date(selectedDateRange.from).getFullYear().toString() : undefined}
                 comparisonLabel={isComparison ? comparisonYear : undefined}
               />
             </div>
           </div>
           
-          {!isCustomDate && (
-            <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Compare with Another Year</h4>
-                  <p className="text-sm text-blue-700 dark:text-blue-300">See how {selectedYear} compares to the same period in a different year</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Input
-                    type="number"
-                    placeholder="2023"
-                    value={comparisonYear}
-                    onChange={(e) => setComparisonYear(e.target.value)}
-                    className="w-24 text-sm"
-                    min="2015"
-                    max="2035"
-                  />
-                  <Button
-                    onClick={handleCompareYear}
-                    size="sm"
-                    disabled={!comparisonYear || comparisonYear === selectedYear}
-                  >
-                    <GitCompare className="h-4 w-4 mr-2" />
-                    Compare
-                  </Button>
-                </div>
+          <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Compare with Another Year</h4>
+                <p className="text-sm text-blue-700 dark:text-blue-300">Compare your current date range with the same period in a different year</p>
               </div>
-              {isComparison && comparisonResults && (
-                <div className="flex items-center justify-between pt-2 border-t border-blue-200 dark:border-blue-800">
-                  <span className="text-sm text-blue-700 dark:text-blue-300">
-                    Comparing {selectedYear} with {comparisonYear} • {comparisonResults.length} data points
-                  </span>
-                  <Button
-                    onClick={() => {
-                      setIsComparison(false)
-                      setComparisonResults(null)
-                      setComparisonYear('')
-                    }}
-                    variant="ghost"
-                    size="sm"
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-                  >
-                    Clear Comparison
-                  </Button>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  placeholder="2023"
+                  value={comparisonYear}
+                  onChange={(e) => setComparisonYear(e.target.value)}
+                  className="w-24 text-sm"
+                  min="2015"
+                  max="2035"
+                />
+                <Button
+                  onClick={handleCompareYear}
+                  size="sm"
+                  disabled={!comparisonYear || comparisonYear === new Date(selectedDateRange.from).getFullYear().toString()}
+                >
+                  <GitCompare className="h-4 w-4 mr-2" />
+                  Compare
+                </Button>
+              </div>
             </div>
-          )}
+            {isComparison && comparisonResults && (
+              <div className="flex items-center justify-between pt-2 border-t border-blue-200 dark:border-blue-800">
+                <span className="text-sm text-blue-700 dark:text-blue-300">
+                  Comparing {new Date(selectedDateRange.from).getFullYear()} with {comparisonYear} • {comparisonResults.length} data points
+                </span>
+                <Button
+                  onClick={() => {
+                    setIsComparison(false)
+                    setComparisonResults(null)
+                    setComparisonYear('')
+                  }}
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
+                >
+                  Clear Comparison
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Summary Statistics */}
           <div className="bg-card p-4 rounded-lg border space-y-4">
@@ -812,14 +761,14 @@ export function NDVIAnalysis() {
               <h4 className="font-medium text-foreground">Daily Health Scores</h4>
               <div className="flex gap-1">
                 <Button
-                  onClick={handleExportPDF}
+                  onClick={handleExportCSV}
                   variant="outline"
                   size="sm"
                   className="text-xs"
                   disabled={!results || results.length === 0}
                 >
                   <Download className="h-3 w-3 mr-1" />
-                  PDF
+                  CSV
                 </Button>
                 <Button
                   onClick={() => {
@@ -883,7 +832,7 @@ export function NDVIAnalysis() {
               There might be no satellite images available for your selected area and time period.
             </p>
             <p className="text-xs text-muted-foreground/80">
-              Try selecting a different {isCustomDate ? 'date range' : 'year'} or check if your farm area is drawn correctly.
+              Try selecting a different date range or check if your farm area is drawn correctly.
             </p>
           </div>
         </div>
