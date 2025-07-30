@@ -189,41 +189,14 @@ export function NDVIAnalysis() {
     try {
       toast('Generating CSV file...', { icon: '⏳' })
       
-      let csvContent = 'Date,NDVI Value,Health Status'
+      // Simple CSV header - only current period data
+      let csvContent = 'Date,NDVI Value,Health Status\n'
       
-      // Add comparison header if available
-      if (isComparison && comparisonResults) {
-        csvContent = `Date,${new Date(selectedDateRange.from).getFullYear()} NDVI,${comparisonYear} NDVI,Difference,${new Date(selectedDateRange.from).getFullYear()} Health Status,${comparisonYear} Health Status`
-      }
-      
-      csvContent += '\n'
-      
-      if (isComparison && comparisonResults) {
-        // Export comparison data
-        results.forEach((point: any) => {
-          const pointDate = new Date(point.date)
-          const pointMonthDay = `${String(pointDate.getMonth() + 1).padStart(2, '0')}-${String(pointDate.getDate()).padStart(2, '0')}`
-          
-          const compPoint = comparisonResults.find((comp: any) => {
-            const compDate = new Date(comp.date)
-            const compMonthDay = `${String(compDate.getMonth() + 1).padStart(2, '0')}-${String(compDate.getDate()).padStart(2, '0')}`
-            return compMonthDay === pointMonthDay
-          })
-          
-          const primaryHealth = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
-          const comparisonHealth = compPoint ? (compPoint.mean > 0.5 ? 'Excellent' : compPoint.mean > 0.2 ? 'Good' : 'Poor') : 'N/A'
-          const difference = compPoint ? (point.mean - compPoint.mean).toFixed(3) : 'N/A'
-          const comparisonValue = compPoint ? compPoint.mean.toFixed(3) : 'N/A'
-          
-          csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${comparisonValue},${difference},${primaryHealth},${comparisonHealth}\n`
-        })
-      } else {
-        // Export single period data
-        results.forEach((point: any) => {
-          const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
-          csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${healthStatus}\n`
-        })
-      }
+      // Export only current period data
+      results.forEach((point: any) => {
+        const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
+        csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${healthStatus}\n`
+      })
       
       // Create and download the file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
