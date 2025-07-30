@@ -237,27 +237,7 @@ The new Next.js client provides a modern web interface for the FutureFarmNow pla
    Open [http://localhost:3000](http://localhost:3000) to view the application.
 
 ### Production Deployment
-
-#### Option A: Deploy to Vercel (Recommended)
-
-1. **Install Vercel CLI**
-   ```bash
-   npm install -g vercel
-   ```
-
-2. **Deploy to Vercel**
-   ```bash
-   cd ffn-nextjs-app
-   vercel
-   ```
-   Follow the prompts to configure your deployment.
-
-3. **Configure environment variables in Vercel dashboard**
-   - Go to your project settings in Vercel
-   - Add `NEXT_PUBLIC_API_BASE_URL` with your backend server URL
-   - Example: `https://ffn.example.com/futurefarmnow-backend-0.3-RC1`
-
-#### Option B: Deploy to Apache/Nginx
+#### Deploy to Apache/Nginx
 
 1. **Build the application**
    ```bash

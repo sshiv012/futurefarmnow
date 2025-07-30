@@ -23,24 +23,16 @@ npm install
 # Set up environment variables
 cp .env.local.example .env.local
 # Edit .env.local with your API configuration
-
+vi .env.local
+# NEXT_PUBLIC_API_BASE_URL=https://raptor.cs.ucr.edu/futurefarmnow-backend-0.3-RC1
+# Optional: For development, you can use a local backend
+# NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 # Start development server
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-### **Environment Configuration**
-
-Create a `.env.local` file in the project root:
-
-```bash
-# API Configuration
-NEXT_PUBLIC_API_BASE_URL=https://raptor.cs.ucr.edu/futurefarmnow-backend-0.3-RC1
-
-# Optional: For development, you can use a local backend
-# NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
-```
 
 ## 🛠️ **Available Scripts**
 
@@ -73,19 +65,6 @@ npm run build
 
 # Test production build locally
 npm run start
-```
-
-### **Deploy to Vercel**
-
-```bash
-# Install Vercel CLI
-npm install -g vercel
-
-# Deploy to Vercel
-vercel
-
-# For production deployment
-vercel --prod
 ```
 
 ## 📁 **Project Structure**
@@ -168,40 +147,6 @@ ffn-nextjs-app/
 - Chart and map visualizations
 - Statistical summaries
 
-## 🔧 **Configuration**
-
-### **API Integration**
-
-The application connects to the FutureFarmNow backend API. Configure the API URL in your environment:
-
-```bash
-# Development
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
-```
-
-### **Map Configuration**
-
-Maps use OpenStreetMap tiles by default. You can configure alternative tile sources in the map components.
-
-## 🚨 **Troubleshooting**
-
-### **Common Issues**
-
-1. **CORS Errors**
-   - The app uses API proxy routes to handle CORS
-   - Ensure your API endpoint is correctly configured
-
-2. **Build Errors**
-   - Run `npm run type-check` to identify TypeScript issues
-   - Run `npm run lint` to check for code quality issues
-
-3. **Map Loading Issues**
-   - Check your internet connection for tile loading
-   - Verify Leaflet CSS is properly imported
-
-4. **PDF Export Issues**
-   - Large datasets may cause memory issues
-   - Consider reducing the number of data points for export
    
 ## 📄 **License**
 
