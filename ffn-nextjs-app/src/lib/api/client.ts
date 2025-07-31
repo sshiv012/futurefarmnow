@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios'
+import { AxiosInstance, AxiosResponse } from 'axios'
+import axios from 'axios'
 import {
   VectorDataResponse,
   GeoJSONFeatureCollection,
@@ -31,7 +32,6 @@ class APIClient {
 
     this.client.interceptors.request.use(
       (config) => {
-        console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
         return config
       },
       (error) => Promise.reject(error)
@@ -45,7 +45,6 @@ class APIClient {
           code: error.response?.status?.toString(),
           details: error.response?.data
         }
-        console.error('API Error:', apiError)
         return Promise.reject(apiError)
       }
     )
@@ -85,13 +84,11 @@ class APIClient {
       layer: params.layer
     })
 
-    const response: AxiosResponse<SoilStatsResponse> = await axios.post(
-      `/api/soil/stats?${queryParams}`,
-      params.geometry,
+    const response: AxiosResponse<SoilStatsResponse> = await this.client.post(
+      `/soil/singlepolygon.json?${queryParams}`,
+      JSON.stringify(params.geometry),
       {
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'text/plain' }
       }
     )
     return response.data
@@ -119,14 +116,12 @@ class APIClient {
       layer: params.layer
     })
 
-    const response: AxiosResponse<Blob> = await axios.post(
-      `/api/soil/image?${queryParams}`,
-      params.geometry,
+    const response: AxiosResponse<Blob> = await this.client.post(
+      `/soil/image.png?${queryParams}`,
+      JSON.stringify(params.geometry),
       {
-        responseType: 'blob',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'text/plain' },
+        responseType: 'blob'
       }
     )
     return response.data
@@ -139,13 +134,11 @@ class APIClient {
       num_points: params.num_points.toString()
     })
 
-    const response: AxiosResponse<SoilSampleResponse> = await axios.post(
-      `/api/soil/sample?${queryParams}`,
-      params.geometry,
+    const response: AxiosResponse<SoilSampleResponse> = await this.client.post(
+      `/soil/sample.json?${queryParams}`,
+      JSON.stringify(params.geometry),
       {
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'text/plain' }
       }
     )
     return response.data
@@ -193,13 +186,11 @@ class APIClient {
       to: params.to
     })
 
-    const response: AxiosResponse<NDVISinglePolygonResponse> = await axios.post(
-      `/api/ndvi/singlepolygon?${queryParams}`,
-      params.geometry,
+    const response: AxiosResponse<NDVISinglePolygonResponse> = await this.client.post(
+      `/ndvi/singlepolygon.json?${queryParams}`,
+      JSON.stringify(params.geometry),
       {
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: { 'Content-Type': 'text/plain' }
       }
     )
     return response.data
@@ -211,8 +202,7 @@ class APIClient {
     to: string,
     bbox?: BoundingBox
   ): Promise<NDVIMultiPolygonResponse> {
-    const params = new URLSearchParams({
-      vectorId,
+    const params = {
       from,
       to,
       ...(bbox && {
@@ -221,10 +211,11 @@ class APIClient {
         maxx: bbox.maxx.toString(),
         maxy: bbox.maxy.toString()
       })
-    })
+    }
 
-    const response: AxiosResponse<NDVIMultiPolygonResponse> = await axios.get(
-      `/api/ndvi/region?${params}`
+    const response: AxiosResponse<NDVIMultiPolygonResponse> = await this.client.get(
+      `/ndvi/${vectorId}.json`,
+      { params }
     )
     return response.data
   }

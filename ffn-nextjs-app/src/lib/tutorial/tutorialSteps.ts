@@ -96,12 +96,12 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'drawing-actions',
-    title: 'Save or Cancel Actions 💾',
-    content: 'After drawing, editing, or deleting, you\'ll see Save and Cancel buttons here. Click Save to confirm your changes or Cancel to undo them.',
-    targetSelector: '.leaflet-draw-actions',
+    title: 'Edit and Delete Actions 💾',
+    content: 'Use the Edit (✏️) and Delete (🗑️) buttons to modify your drawn areas. When editing or deleting, Save (✓) and Cancel (✗) buttons will appear to confirm or undo your changes. Drawing is straightforward - just draw and it\'s automatically saved.',
+    targetSelector: '.leaflet-draw-edit-edit, .leaflet-draw-edit-remove',
     position: 'right',
     action: 'none',
-    waitForElement: true,
+    waitForElement: false,
     skipEnabled: true
   },
   {

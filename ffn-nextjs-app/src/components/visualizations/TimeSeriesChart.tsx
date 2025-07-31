@@ -31,23 +31,9 @@ function createChartData(dataset: TimeSeriesData[]) {
         date = new Date(item.date)
       }
       
-      // Debug logging to verify date parsing
-      if (index === 0) {
-        console.log('Date parsing check:', {
-          rawDate: item.date,
-          parsedDate: date,
-          isValid: !isNaN(date.getTime()),
-          year: date.getFullYear(),
-          month: date.getMonth(),
-          day: date.getDate(),
-          formatted: date.toLocaleDateString(),
-          timezone: date.getTimezoneOffset()
-        })
-      }
       
       // Validate parsed date
       if (isNaN(date.getTime())) {
-        console.error('Invalid date found:', item.date)
         return null
       }
       

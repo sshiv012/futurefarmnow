@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api/client'
 import { TimeSeriesChart } from '@/components/visualizations/TimeSeriesChart'
 import { AlertCircle, Calendar, Download, GitCompare } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { formatDateString, parseDate } from '@/lib/utils'
 
 export function NDVIAnalysis() {
   const {
@@ -38,6 +39,15 @@ export function NDVIAnalysis() {
       setIsComparison(false)
     }
   }, [clearTrigger])
+
+  // Set default comparison year when results are loaded
+  useEffect(() => {
+    if (results && results.length > 0 && !comparisonYear) {
+      const currentYear = parseDate(selectedDateRange.from).getFullYear()
+      const previousYear = currentYear - 1
+      setComparisonYear(previousYear.toString())
+    }
+  }, [results, selectedDateRange.from, comparisonYear])
 
   const ndviAnalysisMutation = useMutation({
     mutationFn: async (params: any) => {
@@ -82,11 +92,6 @@ export function NDVIAnalysis() {
       to: selectedDateRange.to,
       geometry: drawnPolygon
     }
-    console.log('NDVI Analysis Params:', { 
-      from: params.from, 
-      to: params.to,
-      selectedDateRange 
-    })
     toast('Checking your crop health over time...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
   }
@@ -108,11 +113,6 @@ export function NDVIAnalysis() {
       bbox: currentBounds,
       isFarmlandAnalysis: true
     }
-    console.log('NDVI Farmland Analysis Params:', { 
-      from: params.from, 
-      to: params.to,
-      selectedDateRange 
-    })
     toast('Analyzing crop health for all farmlands in view...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
   }
@@ -121,21 +121,14 @@ export function NDVIAnalysis() {
     if (!comparisonYear || !results) return
     
     // For date ranges, try to match the same time period in the comparison year
-    const fromDate = new Date(selectedDateRange.from)
-    const toDate = new Date(selectedDateRange.to)
+    const fromDate = parseDate(selectedDateRange.from)
+    const toDate = parseDate(selectedDateRange.to)
     
     const comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
     const comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
     
-    const currentYear = new Date(selectedDateRange.from).getFullYear().toString()
+    const currentYear = parseDate(selectedDateRange.from).getFullYear().toString()
     
-    console.log('Comparison dates:', { 
-      comparisonYear, 
-      currentYear,
-      selectedDateRange,
-      comparisonFrom, 
-      comparisonTo 
-    })
     
     setAnalyzingType('polygon')
     toast(`Comparing ${currentYear} with ${comparisonYear}...`, { icon: '⏳' })
@@ -212,7 +205,6 @@ export function NDVIAnalysis() {
       
       toast.success('CSV file exported successfully!')
     } catch (error) {
-      console.error('CSV export error:', error)
       toast.error('Failed to export CSV file')
     }
   }
@@ -457,7 +449,6 @@ export function NDVIAnalysis() {
       
       toast.success('PDF report exported successfully!')
     } catch (error) {
-      console.error('PDF export error:', error)
       toast.error('Failed to export PDF report')
     }
   }
@@ -518,11 +509,14 @@ export function NDVIAnalysis() {
             Selected time period:
           </p>
           <p className="text-muted-foreground mt-1">
-            From {new Date(selectedDateRange.from).toLocaleDateString()} to{' '}
-            {new Date(selectedDateRange.to).toLocaleDateString()}
+            From {formatDateString(selectedDateRange.from)} to {formatDateString(selectedDateRange.to)}
           </p>
           <p className="text-muted-foreground">
-            Total days: {Math.ceil((new Date(selectedDateRange.to).getTime() - new Date(selectedDateRange.from).getTime()) / (1000 * 60 * 60 * 24))}
+            Total days: {(() => {
+              const fromDate = parseDate(selectedDateRange.from)
+              const toDate = parseDate(selectedDateRange.to)
+              return Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+            })()}
           </p>
         </div>
       </div>
@@ -651,7 +645,7 @@ export function NDVIAnalysis() {
                 <Button
                   onClick={handleCompareYear}
                   size="sm"
-                  disabled={!comparisonYear || comparisonYear === new Date(selectedDateRange.from).getFullYear().toString()}
+                  disabled={!comparisonYear || comparisonYear === parseDate(selectedDateRange.from).getFullYear().toString()}
                 >
                   <GitCompare className="h-4 w-4 mr-2" />
                   Compare

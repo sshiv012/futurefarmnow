@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useTutorial } from '@/lib/contexts/TutorialContext'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { TutorialPopup } from './TutorialPopup'
@@ -20,26 +20,7 @@ export function TutorialOverlay() {
   const [isVisible, setIsVisible] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (isActive && currentStep) {
-      // Handle auto actions
-      if (currentStep.autoAction?.type === 'switchTab') {
-        setActiveTab(currentStep.autoAction.value)
-      }
-      
-      // Small delay to ensure DOM is ready
-      const timer = setTimeout(() => {
-        updateHighlight()
-        setIsVisible(true)
-      }, 100)
-      return () => clearTimeout(timer)
-    } else {
-      setIsVisible(false)
-      setHighlightArea(null)
-    }
-  }, [isActive, currentStep, setActiveTab])
-
-  const updateHighlight = () => {
+  const updateHighlight = useCallback(() => {
     if (!currentStep) return
 
     const targetElement = document.querySelector(currentStep.targetSelector)
@@ -58,7 +39,26 @@ export function TutorialOverlay() {
       height: rect.height + padding * 2,
       borderRadius: 8
     })
-  }
+  }, [currentStep])
+
+  useEffect(() => {
+    if (isActive && currentStep) {
+      // Handle auto actions
+      if (currentStep.autoAction?.type === 'switchTab') {
+        setActiveTab(currentStep.autoAction.value)
+      }
+      
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        updateHighlight()
+        setIsVisible(true)
+      }, 100)
+      return () => clearTimeout(timer)
+    } else {
+      setIsVisible(false)
+      setHighlightArea(null)
+    }
+  }, [isActive, currentStep, setActiveTab, updateHighlight])
 
   // Update highlight on window resize
   useEffect(() => {
@@ -70,7 +70,7 @@ export function TutorialOverlay() {
 
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [isActive, currentStep])
+  }, [isActive, currentStep, updateHighlight])
 
   // Update highlight when DOM changes (for dynamic content)
   useEffect(() => {
@@ -88,7 +88,7 @@ export function TutorialOverlay() {
     })
 
     return () => observer.disconnect()
-  }, [isActive, currentStep])
+  }, [isActive, currentStep, updateHighlight])
 
   if (!isActive || !isVisible) {
     return null

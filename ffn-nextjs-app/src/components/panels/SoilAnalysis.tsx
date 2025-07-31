@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Select, SelectOption } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -178,8 +179,6 @@ export function SoilAnalysis() {
     mutationFn: (params: { soildepth: string; layer: string; bbox: any }) => 
       apiClient.getSoilStatsForFarmland(params.soildepth, params.layer, params.bbox),
     onSuccess: (data) => {
-      console.log('Farmland API response:', data)
-      console.log('Raw data structure:', JSON.stringify(data, null, 2))
       
       // The farmland API returns results in different formats
       // Check if it's an array of farmland results or a single stats object
@@ -192,14 +191,12 @@ export function SoilAnalysis() {
         data.forEach((farmland: any, index: number) => {
           const stats = farmland.results || farmland
           const value = stats.average ?? stats.mean
-          console.log(`Processing farmland ${index}:`, { farmland, stats, value })
           if (value !== undefined && value !== null && !isNaN(value)) {
             if (value < globalMin) globalMin = value
             if (value > globalMax) globalMax = value
           }
         })
         
-        console.log('Calculated global min/max from array:', { globalMin, globalMax })
         
         if (globalMin !== Infinity && globalMax !== -Infinity) {
           // Set farmland results with calculated global values
@@ -218,14 +215,12 @@ export function SoilAnalysis() {
         
         data.results.forEach((result: any, index: number) => {
           const value = result.average ?? result.mean
-          console.log(`Processing result ${index}:`, { result, value })
           if (value !== undefined && value !== null && !isNaN(value)) {
             if (value < globalMin) globalMin = value
             if (value > globalMax) globalMax = value
           }
         })
         
-        console.log('Calculated global min/max from results array:', { globalMin, globalMax })
         
         if (globalMin !== Infinity && globalMax !== -Infinity) {
           setFarmlandResults({
@@ -238,11 +233,9 @@ export function SoilAnalysis() {
         }
       } else if (data.results && Object.keys(data.results).length > 0) {
         // Single result case - use its min/max directly
-        console.log('Single result case:', data.results)
         setFarmlandResults(data.results)
       } else if (data && Object.keys(data).length > 0) {
         // Direct stats object
-        console.log('Direct stats object:', data)
         setFarmlandResults(data)
       } else {
         toast.error('No farmland data available in the current view')
@@ -263,8 +256,6 @@ export function SoilAnalysis() {
   const farmlandGeoJSONMutation = useMutation({
     mutationFn: (bbox: any) => apiClient.getFarmlandGeoJSON(bbox),
     onSuccess: (data) => {
-      console.log('Farmland GeoJSON response:', data)
-      console.log('Sample GeoJSON features:', data.features?.slice(0, 3))
       
       // If we have farmland results, pass them along with the GeoJSON
       if (farmlandResults) {
@@ -285,7 +276,6 @@ export function SoilAnalysis() {
       }
     },
     onError: (error: any) => {
-      console.error('Failed to load farmland GeoJSON:', error)
       toast.error('Failed to load farmland boundaries')
     }
   })
@@ -301,7 +291,6 @@ export function SoilAnalysis() {
       if (drawnPolygons && drawnPolygons.length > 0) {
         const bounds = calculateMultiPolygonBounds(drawnPolygons)
         if (bounds) {
-          console.log('MBR bounds for soil image:', bounds)
           setSoilImageOverlay(imageUrl, bounds)
         }
       }
@@ -312,7 +301,6 @@ export function SoilAnalysis() {
       }
     },
     onError: (error: any) => {
-      console.error('Soil image error:', error)
       if (error.message?.includes('CORS') || error.code === 'ERR_NETWORK') {
         toast.error('Network error - please check your connection and try again')
       } else {
@@ -561,7 +549,6 @@ export function SoilAnalysis() {
           yPosition += chartHeight + 15
         }
       } catch (error) {
-        console.error('Failed to capture chart:', error)
       }
 
       // Statistical results as text backup
@@ -619,7 +606,6 @@ export function SoilAnalysis() {
             reader.readAsDataURL(blob)
           })
         } catch (error) {
-          console.error('Failed to add soil image:', error)
         }
       }
 
@@ -651,7 +637,6 @@ export function SoilAnalysis() {
           yPosition += legendHeight + 15
         }
       } catch (error) {
-        console.error('Failed to capture legend:', error)
       }
 
       // Capture the results component with values - ensure full rendering
@@ -684,7 +669,6 @@ export function SoilAnalysis() {
           yPosition += resultsHeight + 10
         }
       } catch (error) {
-        console.error('Failed to capture results:', error)
       }
 
       // Description
@@ -710,7 +694,6 @@ export function SoilAnalysis() {
       
       toast.success('PDF report exported successfully!')
     } catch (error) {
-      console.error('PDF export error:', error)
       toast.error('Failed to export PDF report')
     }
   }
@@ -1019,11 +1002,14 @@ export function SoilAnalysis() {
               </h4>
               
               <div className="bg-muted/20 p-4 rounded-lg">
-                <img 
+                <Image 
                   src={soilImageUrl} 
                   alt={`Soil ${SOIL_LAYERS.find(l => l.value === selectedSoilLayer)?.label} visualization`}
                   className="w-full h-auto rounded border shadow-sm"
                   style={{ maxHeight: '400px', objectFit: 'contain' }}
+                  width={800}
+                  height={400}
+                  unoptimized
                 />
                 <div className="mt-2 text-xs text-muted-foreground text-center">
                   Color-coded map showing {SOIL_LAYERS.find(l => l.value === selectedSoilLayer)?.label.toLowerCase()} 

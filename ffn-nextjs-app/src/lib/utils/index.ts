@@ -5,33 +5,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Color utility functions for map visualization
-export function valueToColor(value: number, min: number, max: number): string {
-  const normalized = (value - min) / (max - min)
-  const intensity = Math.round(normalized * 255)
-  return `rgb(${intensity}, ${intensity}, ${intensity})`
-}
-
-export function generateColorScale(min: number, max: number, steps: number = 5) {
-  const range = max - min
-  const step = range / steps
-  const colors: Array<{ range: string; color: string }> = []
-
-  for (let i = 0; i < steps; i++) {
-    const minValue = min + step * i
-    const maxValue = minValue + step
-    const color = valueToColor((minValue + maxValue) / 2, min, max)
-    colors.push({
-      range: `[${minValue.toFixed(2)}, ${maxValue.toFixed(2)}]`,
-      color
-    })
-  }
-
-  return colors
-}
 
 // Date formatting utilities
+
+/**
+ * Parse YYYY-MM-DD date string without timezone issues
+ */
+export function parseDate(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+/**
+ * Format YYYY-MM-DD date string to localized date string without timezone issues
+ */
+export function formatDateString(dateString: string): string {
+  return parseDate(dateString).toLocaleDateString()
+}
+
 export function formatDate(date: string | Date): string {
+  // If it's a YYYY-MM-DD string, use timezone-safe parsing
+  if (typeof date === 'string' && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return parseDate(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+  
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleDateString('en-US', {
     year: 'numeric',

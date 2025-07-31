@@ -3,12 +3,13 @@
  * @param value The value to convert
  * @param min The minimum value in the range
  * @param max The maximum value in the range
- * @returns RGB color string (black to white gradient)
+ * @returns RGB color string (white to black gradient - higher values = darker)
  */
 export function valueToGrayscale(value: number, min: number, max: number): string {
   const normalized = (value - min) / (max - min)
 
-  const intensity = Math.round(normalized * 255)
+  // Invert the intensity so higher values = darker colors
+  const intensity = Math.round((1 - normalized) * 255)
 
   // Return as rgb string (equal values = grayscale)
   return `rgb(${intensity}, ${intensity}, ${intensity})`
@@ -20,7 +21,7 @@ export function valueToGrayscale(value: number, min: number, max: number): strin
  * @param min The minimum value in the range
  * @param max The maximum value in the range
  * @param opacity The opacity level (0-1)
- * @returns RGBA color string
+ * @returns RGBA color string (white to black gradient - higher values = darker)
  */
 export function valueToGrayscaleWithOpacity(
   value: number,
@@ -29,6 +30,7 @@ export function valueToGrayscaleWithOpacity(
   opacity: number = 0.6
 ): string {
   const normalized = (value - min) / (max - min)
-  const intensity = Math.round(normalized * 255)
+  // Invert the intensity so higher values = darker colors
+  const intensity = Math.round((1 - normalized) * 255)
   return `rgba(${intensity}, ${intensity}, ${intensity}, ${opacity})`
 }

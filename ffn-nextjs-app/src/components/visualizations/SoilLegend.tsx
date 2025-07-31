@@ -1,5 +1,7 @@
 'use client'
 
+import { valueToGrayscale } from '@/lib/utils/color'
+
 interface SoilLegendProps {
   soilLayer: string
   min: number
@@ -21,17 +23,16 @@ export function SoilLegend({ soilLayer, min, max }: SoilLegendProps) {
     )
   }
 
-  // Generate color gradient from black (low) to white (high) like reference
+  // Generate color gradient using the same function as the map
   const generateColorStops = () => {
     const steps = 8
     const colors = []
     for (let i = 0; i < steps; i++) {
       const ratio = i / (steps - 1)
-      // Grayscale gradient from black (0) to white (255)
-      const grayValue = Math.round(ratio * 255)
+      const value = min + (ratio * (max - min))
       colors.push({
-        color: `rgb(${grayValue}, ${grayValue}, ${grayValue})`,
-        value: min + (ratio * (max - min))
+        color: valueToGrayscale(value, min, max),
+        value: value
       })
     }
     return colors
@@ -80,7 +81,7 @@ export function SoilLegend({ soilLayer, min, max }: SoilLegendProps) {
       </div>
       
       <div className="text-xs text-muted-foreground">
-        <strong>Legend:</strong> Lower values appear in black, higher values in white. 
+        <strong>Legend:</strong> Lower values appear in white, higher values in black. 
         Use this to interpret the soil map colors above.
       </div>
     </div>

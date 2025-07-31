@@ -29,6 +29,8 @@ export default function LeafletMap() {
   const [locationError, setLocationError] = useState<string | null>(null)
   const isUpdatingFromURL = useRef(false)
   const hasCheckedURLCoordinates = useRef(false)
+  const userMarkerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const urlUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const { 
     selectedDataset, 
@@ -123,8 +125,10 @@ export default function LeafletMap() {
         }
         
         // Remove marker after 5 seconds
-        setTimeout(() => {
-          mapInstanceRef.current?.removeLayer(userMarker)
+        userMarkerTimeoutRef.current = setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.removeLayer(userMarker)
+          }
         }, 5000)
         
         // Dismiss loading and show success
@@ -308,28 +312,70 @@ export default function LeafletMap() {
 
     // Cleanup
     return () => {
+      // Clear timeouts
+      if (userMarkerTimeoutRef.current) {
+        clearTimeout(userMarkerTimeoutRef.current)
+        userMarkerTimeoutRef.current = null
+      }
+      
+      if (urlUpdateTimeoutRef.current) {
+        clearTimeout(urlUpdateTimeoutRef.current)
+        urlUpdateTimeoutRef.current = null
+      }
+      
+      // Remove style element if it exists
+      const styleElement = document.getElementById('location-pulse-style')
+      if (styleElement) {
+        styleElement.remove()
+      }
+      
       if (mapInstanceRef.current) {
-        setMapInstance(null)
-        setDrawnItems(null)
+        // Remove all event listeners
+        mapInstanceRef.current.off()
         
-        // Clean up tile layer references
+        // Clean up draw control
+        if (drawControlRef.current) {
+          mapInstanceRef.current.removeControl(drawControlRef.current)
+          drawControlRef.current = null
+        }
+        
+        // Clean up all layer references
         if (vectorTileLayerRef.current) {
           mapInstanceRef.current.removeLayer(vectorTileLayerRef.current)
           vectorTileLayerRef.current = null
         }
         
-        // Clean up soil image overlay
+        if (tileLayerRef.current) {
+          mapInstanceRef.current.removeLayer(tileLayerRef.current)
+          tileLayerRef.current = null
+        }
+        
         if (soilImageOverlayRef.current) {
           mapInstanceRef.current.removeLayer(soilImageOverlayRef.current)
           soilImageOverlayRef.current = null
         }
 
-        // Clean up farmland layer
         if (farmlandLayerRef.current) {
           mapInstanceRef.current.removeLayer(farmlandLayerRef.current)
           farmlandLayerRef.current = null
         }
         
+        if (vectorLayerRef.current) {
+          mapInstanceRef.current.removeLayer(vectorLayerRef.current)
+          vectorLayerRef.current = null
+        }
+        
+        if (drawnItemsRef.current) {
+          drawnItemsRef.current.clearLayers()
+          mapInstanceRef.current.removeLayer(drawnItemsRef.current)
+          drawnItemsRef.current = null
+        }
+        
+        // Clear store references
+        setMapInstance(null)
+        setDrawnItems(null)
+        
+        // Remove the map instance
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
       }
@@ -357,7 +403,15 @@ export default function LeafletMap() {
       
       isUpdatingFromURL.current = true
       mapInstanceRef.current.setView(targetCenter, targetZoom)
-      setTimeout(() => { isUpdatingFromURL.current = false }, 100)
+      
+      // Clear any existing timeout
+      if (urlUpdateTimeoutRef.current) {
+        clearTimeout(urlUpdateTimeoutRef.current)
+      }
+      
+      urlUpdateTimeoutRef.current = setTimeout(() => { 
+        isUpdatingFromURL.current = false 
+      }, 100)
     }
   }, [currentCenter, currentZoom])
 
@@ -394,6 +448,17 @@ export default function LeafletMap() {
     if (vectorTileLayerRef.current && selectedDataset) {
       // Ensure vector tiles are above base map
       vectorTileLayerRef.current.bringToFront()
+    }
+    
+    // Cleanup function for this effect
+    return () => {
+      if (newTileLayer && mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.removeLayer(newTileLayer)
+        } catch (e) {
+          // Layer might already be removed, ignore error
+        }
+      }
     }
   }, [resolvedTheme, selectedDataset])
 
@@ -456,15 +521,29 @@ export default function LeafletMap() {
         setIsInitialLoad(false)
       }
     }
-  }, [selectedDataset, isInitialLoad])
+    
+    // Cleanup function
+    return () => {
+      if (vectorTileLayerRef.current && mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.removeLayer(vectorTileLayerRef.current)
+        } catch (e) {
+          // Layer might already be removed, ignore error
+        }
+      }
+    }
+  }, [selectedDataset, isInitialLoad]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle soil image overlay
   useEffect(() => {
     if (!mapInstanceRef.current) return
 
+    // Store reference to current overlay for cleanup
+    const currentOverlay = soilImageOverlayRef.current
+
     // Remove existing overlay
-    if (soilImageOverlayRef.current) {
-      mapInstanceRef.current.removeLayer(soilImageOverlayRef.current)
+    if (currentOverlay) {
+      mapInstanceRef.current.removeLayer(currentOverlay)
       soilImageOverlayRef.current = null
     }
 
@@ -491,17 +570,29 @@ export default function LeafletMap() {
     }
 
     // Add new overlay if image and bounds are available
+    let newOverlay: L.ImageOverlay | null = null
     if (soilImageUrl && soilImageBounds) {
-      const overlay = L.imageOverlay(soilImageUrl, soilImageBounds, {
+      newOverlay = L.imageOverlay(soilImageUrl, soilImageBounds, {
         opacity: 1.0,
         className: 'soil-image-overlay'
       })
       
-      overlay.addTo(mapInstanceRef.current)
-      soilImageOverlayRef.current = overlay
+      newOverlay.addTo(mapInstanceRef.current)
+      soilImageOverlayRef.current = newOverlay
       
       // Bring overlay to front
-      overlay.bringToFront()
+      newOverlay.bringToFront()
+    }
+    
+    // Cleanup function
+    return () => {
+      if (newOverlay && mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.removeLayer(newOverlay)
+        } catch (e) {
+          // Layer might already be removed, ignore error
+        }
+      }
     }
   }, [soilImageUrl, soilImageBounds])
 
@@ -509,9 +600,12 @@ export default function LeafletMap() {
   useEffect(() => {
     if (!mapInstanceRef.current) return
 
+    // Store reference to current layer for cleanup
+    const currentFarmlandLayer = farmlandLayerRef.current
+
     // Remove existing farmland layer
-    if (farmlandLayerRef.current) {
-      mapInstanceRef.current.removeLayer(farmlandLayerRef.current)
+    if (currentFarmlandLayer) {
+      mapInstanceRef.current.removeLayer(currentFarmlandLayer)
       farmlandLayerRef.current = null
     }
 
@@ -523,8 +617,6 @@ export default function LeafletMap() {
       // Create a map of farmland IDs to their average values if color data is available
       const farmlandValueMap = new Map()
       if (colorData && colorData.farmlands) {
-        console.log('Color data available:', colorData)
-        console.log('Farmlands data:', colorData.farmlands)
         
         colorData.farmlands.forEach((farmland: any, index: number) => {
           // Try different ways to get the farmland ID - prioritize objectid since that's what we're seeing
@@ -546,7 +638,6 @@ export default function LeafletMap() {
           
           const value = farmland.average ?? farmland.mean ?? farmland.results?.mean ?? farmland.results?.average
           
-          console.log(`Farmland ${index}:`, { possibleIds, value, farmland })
           
           if (possibleIds.length > 0 && value !== undefined) {
             // Map all possible IDs to the same value, and also store the full farmland data
@@ -554,12 +645,10 @@ export default function LeafletMap() {
               farmlandValueMap.set(id.toString(), value)
               // Also store the full farmland stats for popup display
               farmlandValueMap.set(`stats_${id}`, farmland)
-              console.log(`Mapped ID ${id} to value ${value}`)
             })
           }
         })
         
-        console.log('Final farmland value map:', farmlandValueMap)
       }
       
       const farmlandLayer = L.geoJSON(geoJSONData, {
@@ -593,18 +682,10 @@ export default function LeafletMap() {
               }
             }
             
-            console.log(`Styling feature:`, { 
-              featureProperties: feature.properties,
-              possibleFeatureIds,
-              matchedId,
-              mappedValue: value, 
-              colorDataMinMax: { min: colorData.min, max: colorData.max }
-            })
             
             if (value !== undefined && colorData.min !== undefined && colorData.max !== undefined) {
               fillColor = valueToGrayscale(value, colorData.min, colorData.max)
               fillOpacity = 0.7 // Higher opacity for colored farmlands
-              console.log(`Applied color ${fillColor} for value ${value} (ID: ${matchedId})`)
             }
           }
           
@@ -689,6 +770,17 @@ export default function LeafletMap() {
       // Bring drawn items to front
       if (drawnItemsRef.current) {
         drawnItemsRef.current.bringToFront()
+      }
+      
+      // Cleanup function
+      return () => {
+        if (farmlandLayer && mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.removeLayer(farmlandLayer)
+          } catch (e) {
+            // Layer might already be removed, ignore error
+          }
+        }
       }
     }
   }, [farmlandGeoJSON])

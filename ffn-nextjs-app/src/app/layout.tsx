@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from './providers'
 import { ThemeScript } from '@/components/common/ThemeScript'
@@ -11,11 +11,6 @@ export const metadata: Metadata = {
   description: 'Interactive platform for analyzing California farmland data, soil properties, and NDVI time series',
   keywords: ['geospatial', 'agriculture', 'soil analysis', 'NDVI', 'California farmland'],
   authors: [{ name: 'FutureFarmNow Team' }],
-  viewport: 'width=device-width, initial-scale=1',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0f172a' }
-  ],
   icons: {
     icon: [
       {
@@ -30,6 +25,15 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg",
     apple: "/favicon.svg",
   },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f172a' }
+  ],
 }
 
 export default function RootLayout({
