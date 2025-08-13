@@ -237,6 +237,19 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
     outliers_Pcs = PCs[~rows_to_keep] # Convert filtered_data list to a NumPy array
         
     design, _ = generate_design(filtered_Pcs, num_samples, whitten)
+    
+    # BUG FIX: Ensure design has exactly num_samples points
+    if len(design) > num_samples:
+        # Select the most central points if we have too many
+        from sklearn.metrics import pairwise_distances
+        dist_matrix = pairwise_distances(design)
+        centrality = np.sum(dist_matrix, axis=1)
+        most_central_indices = np.argsort(centrality)[:num_samples]
+        design = design[most_central_indices]
+    elif len(design) < num_samples:
+        # Adjust num_samples if we don't have enough design points
+        print(f"\x1b[33mWarning: Adjusting num_samples from {num_samples} to {len(design)} due to design constraints\x1b[0m")
+        num_samples = len(design)
 
     Geo_space_X = df.loc[rows_to_keep, lat]
     Geo_space_Y = df.loc[rows_to_keep, lon]
@@ -338,32 +351,78 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
                 filtered_indices[i] = np.array([len(Var_space_XY)-len(kept_prefered_points)+c])
                 filtered_distances[i] =  np.array([kept_prefered_points[c]])
                 c+=1
-    arr = np.array(list(map(lambda x: x[0] + x[1], iter_combinations(num_combs=4600000, filtered_distances= filtered_distances, filtered_indices= filtered_indices))))
-    W = weight
-    final_score = float('-inf')
-    threshold = geo_min
-    final_result = None
-    features = Var_space_XY.shape[1]
-    for i in tqdm(arr):
-        idx = i[design.shape[0]:].astype(int)
-        dist_matrix = distance_matrix(Geo_space_XY[idx],
-                                    Geo_space_XY[idx])
-        np.fill_diagonal(dist_matrix, np.inf)
-        dgmin = np.nanmin(dist_matrix)
-        dvmax = i[:design.shape[0]].max()
-
-        dgmin = scale_geo(dgmin)
-        dvmax = scale_var(dvmax)
-
-        score = (- W * scale_var(dvmax)) + (1-W) * scale_geo(dgmin)
-        if score > final_score:
-            final_score = score
-            final_result = idx
+                
+    # BUG FIX: Generate combinations ensuring exactly num_samples distinct points
+    candidate_sets = []
+    for i in range(len(design)):
+        if len(filtered_indices[i]) == 0:
+            # Handle case where no candidates exist for a design point
+            dist_to_design = np.linalg.norm(Var_space_XY - design[i], axis=1)
+            closest_idx = np.argmin(dist_to_design)
+            candidate_sets.append([closest_idx])
+        else:
+            candidate_sets.append(filtered_indices[i])
+    
+    # Generate combinations ensuring one candidate per design point
+    all_combinations = list(itertools.product(*candidate_sets))
+    
+    # Filter for distinct points only (no duplicates)
+    distinct_combinations = []
+    for combo in all_combinations:
+        if len(set(combo)) == num_samples:  # Ensure all points are unique
+            distinct_combinations.append(combo)
+    
+    # If no valid combinations found, use fallback
+    if not distinct_combinations:
+        print("\x1b[33mWarning: No distinct combinations found, using best available candidates\x1b[0m")
+        final_result = []
+        used_indices = set()
+        for candidates in candidate_sets:
+            for idx in candidates:
+                if idx not in used_indices:
+                    final_result.append(idx)
+                    used_indices.add(idx)
+                    break
+        final_result = np.array(final_result[:num_samples])
+    else:
+        # Score combinations to find the best one
+        final_score = float('-inf')
+        final_result = None
+        
+        for combo in tqdm(distinct_combinations[:10000], desc="Scoring combinations"):  # Limit to prevent excessive computation
+            idx = np.array(combo)
+            
+            # Calculate geographic spread
+            dist_matrix = distance_matrix(Geo_space_XY[idx], Geo_space_XY[idx])
+            np.fill_diagonal(dist_matrix, np.inf)
+            dgmin = np.nanmin(dist_matrix)
+            
+            # Calculate feature representation
+            max_feature_dist = 0
+            for i, point_idx in enumerate(idx):
+                dist_to_design = np.linalg.norm(Var_space_XY[point_idx] - design[i])
+                if dist_to_design > max_feature_dist:
+                    max_feature_dist = dist_to_design
+            
+            dgmin = scale_geo(dgmin)
+            dvmax = scale_var(max_feature_dist)
+            
+            score = (1 - weight) * dgmin - weight * dvmax
+            
+            if score > final_score:
+                final_score = score
+                final_result = idx
+    
+    # Ensure we have exactly num_samples points
+    if len(final_result) > num_samples:
+        final_result = final_result[:num_samples]
+    elif len(final_result) < num_samples:
+        print(f"\x1b[33mWarning: Only {len(final_result)} points selected instead of {num_samples}\x1b[0m")
+    
     #Morgans:
     if Morgans:
         # @title Consideration of Moran's I (optional)
         # @markdown running this cell will negate the use of above algorithm and run Moran'I optimization critera instead
-        arr = np.array(list(map(lambda x: x[0] + x[1], iter_combinations(num_combs=4600000))))
         W1 = 0.4  # Example weight for dgmin
         W2 = 0.3  # Example weight for dvmax
         W3 = 0.3  # Example weight for Moran's I
@@ -371,15 +430,20 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
         final_result = None
         features = Var_space_XY.shape[1]
 
-        for i in tqdm(arr):
-            idx = i[design.shape[0]:].astype(int)
+        for combo in tqdm(distinct_combinations[:10000], desc="Scoring with Moran's I"):
+            idx = np.array(combo)
             dist_matrix = distance_matrix(Geo_space_XY[idx], Geo_space_XY[idx])
             np.fill_diagonal(dist_matrix, np.inf)
             dgmin = np.nanmin(dist_matrix)
-            dvmax = i[:design.shape[0]].max()
+            
+            max_feature_dist = 0
+            for i, point_idx in enumerate(idx):
+                dist_to_design = np.linalg.norm(Var_space_XY[point_idx] - design[i])
+                if dist_to_design > max_feature_dist:
+                    max_feature_dist = dist_to_design
 
             dgmin = scale_geo(dgmin)
-            dvmax = scale_var(dvmax)
+            dvmax = scale_var(max_feature_dist)
 
             # Calculate Moran's I for spatial spread
             weights = DistanceBand.from_array(Geo_space_XY[idx], threshold=20, binary=True, silence_warnings=True)
@@ -407,7 +471,7 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
             if score > final_score:
                 final_score = score
                 final_result = idx
+                
     ndf = pd.DataFrame(Geo_space_XY[final_result].reshape(-1, 2), columns=[lat, lon])
     ndf.to_csv(f"{output_name}.csv", index=None)
     return ndf
-
