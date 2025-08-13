@@ -53,6 +53,8 @@ export function SoilAnalysis() {
     setSelectedSoilDepth,
     setSoilImageOverlay,
     setFarmlandGeoJSON,
+    setNDVIImageOverlay,
+    clearNDVICache,
     clearTrigger
   } = useMapStore()
 
@@ -346,8 +348,9 @@ export function SoilAnalysis() {
       geometry: geometry
     }
 
-    // Clear any farmland overlay when doing polygon analysis
+    // Clear any farmland overlay and NDVI overlay when doing polygon analysis
     setFarmlandGeoJSON(null)
+    clearNDVICache()
     
     soilAnalysisMutation.mutate(params)
     soilImageMutation.mutate(params)
@@ -378,8 +381,9 @@ export function SoilAnalysis() {
       bbox: currentBounds
     }
 
-    // Clear any polygon overlay when doing farmland analysis
+    // Clear any polygon overlay and NDVI overlay when doing farmland analysis
     setSoilImageOverlay(null, null)
+    clearNDVICache()
 
     farmlandAnalysisMutation.mutate(params)
     farmlandGeoJSONMutation.mutate(currentBounds)
@@ -396,6 +400,7 @@ export function SoilAnalysis() {
     }
     // Clear map overlays
     setSoilImageOverlay(null, null)
+    clearNDVICache()
     setFarmlandGeoJSON(null)
     toast.success('Analysis results cleared')
   }

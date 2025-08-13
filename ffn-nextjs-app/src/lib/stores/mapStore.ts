@@ -14,6 +14,8 @@ interface MapState {
   soilImageUrl: string | null
   soilImageBounds: [[number, number], [number, number]] | null
   farmlandGeoJSON: any | null
+  ndviImageUrl: string | null
+  ndviImageBounds: [[number, number], [number, number]] | null
   selectedSoilLayer: SoilLayerEnum
   selectedSoilDepth: string
   selectedDateRange: {
@@ -38,8 +40,10 @@ interface MapState {
   setDrawnItems: (drawnItems: L.FeatureGroup | null) => void
   setSoilImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
   setFarmlandGeoJSON: (geoJSON: any | null) => void
+  setNDVIImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
   clearArea: () => void
   clearAllAnalysis: () => void
+  clearNDVICache: () => void
   setSelectedSoilLayer: (layer: SoilLayerEnum) => void
   setSelectedSoilDepth: (depth: string) => void
   setSelectedDateRange: (range: { from: string; to: string }) => void
@@ -60,6 +64,8 @@ export const useMapStore = create<MapState>((set, get) => ({
   soilImageUrl: null,
   soilImageBounds: null,
   farmlandGeoJSON: null,
+  ndviImageUrl: null,
+  ndviImageBounds: null,
   selectedSoilLayer: 'ph',
   selectedSoilDepth: '0-5',
   selectedDateRange: {
@@ -84,12 +90,13 @@ export const useMapStore = create<MapState>((set, get) => ({
   setDrawnItems: (drawnItems) => set({ drawnItems }),
   setSoilImageOverlay: (url, bounds) => set({ soilImageUrl: url, soilImageBounds: bounds }),
   setFarmlandGeoJSON: (geoJSON) => set({ farmlandGeoJSON: geoJSON }),
+  setNDVIImageOverlay: (url, bounds) => set({ ndviImageUrl: url, ndviImageBounds: bounds }),
   clearArea: () => {
     const { drawnItems } = get()
     if (drawnItems) {
       drawnItems.clearLayers()
     }
-    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null })
+    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null, ndviImageUrl: null, ndviImageBounds: null })
   },
   clearAllAnalysis: () => {
     const { drawnItems, clearTrigger } = get()
@@ -102,7 +109,17 @@ export const useMapStore = create<MapState>((set, get) => ({
       soilImageUrl: null,
       soilImageBounds: null,
       farmlandGeoJSON: null,
+      ndviImageUrl: null,
+      ndviImageBounds: null,
       isAnalyzing: false,
+      clearTrigger: clearTrigger + 1
+    })
+  },
+  clearNDVICache: () => {
+    const { clearTrigger } = get()
+    set({
+      ndviImageUrl: null,
+      ndviImageBounds: null,
       clearTrigger: clearTrigger + 1
     })
   },

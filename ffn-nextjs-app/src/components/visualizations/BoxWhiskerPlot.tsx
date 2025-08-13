@@ -14,10 +14,10 @@ interface BoxWhiskerPlotProps {
 }
 
 export function BoxWhiskerPlot({ results }: BoxWhiskerPlotProps) {
-  if (!results || typeof results.min === 'undefined') {
+  if (!results || typeof results.min === 'undefined' || isNaN(results.mean) || isNaN(results.median)) {
     return (
       <div className="flex items-center justify-center h-32 text-muted-foreground">
-        No data available for plot
+        No valid data available for plot
       </div>
     )
   }

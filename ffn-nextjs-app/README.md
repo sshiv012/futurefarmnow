@@ -1,6 +1,6 @@
 # FutureFarmNow - Next.js Application
 
-A modern web application for agricultural data analysis and visualization, providing farmers and researchers with powerful tools to analyze soil properties, NDVI data, and generate comprehensive reports.
+A comprehensive geospatial data processing and visualization platform that combines California farmland vector data with satellite soil salinity data through an interactive web interface. Built with modern web technologies to provide farmers and researchers with powerful tools for agricultural analysis and decision-making.
 
 ## 🚀 **Quick Start**
 
@@ -24,9 +24,9 @@ npm install
 cp .env.local.example .env.local
 # Edit .env.local with your API configuration
 vi .env.local
-# NEXT_PUBLIC_API_BASE_URL=https://raptor.cs.ucr.edu/futurefarmnow-backend-0.3-RC1
-# Optional: For development, you can use a local backend
-# NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+# NEXT_PUBLIC_API_BASE_URL=https://raptor.cs.ucr.edu
+# NEXT_PUBLIC_WSGI_BASE_URL=https://raptor.cs.ucr.edu:8081
+
 # Start development server
 npm run dev
 ```
@@ -67,30 +67,49 @@ npm run build
 npm run start
 ```
 
+### **Static File Deployment**
+
+```bash
+# Build application as static files
+npm run build
+
+# Deploy to server public_html directory
+scp -r out/* user@server:/var/www/sites/raptor.cs.ucr.edu/public_html/
+```
+
+**Note:** The application is configured for static deployment with Next.js output export. The build process generates an `out/` directory with all static files. Automated deployment includes backup systems and rollback capabilities.
+
 ## 📁 **Project Structure**
 
 ```
 ffn-nextjs-app/
 ├── src/
-│   ├── app/                 # Next.js App Router
-│   │   ├── api/            # API routes (CORS proxies)
-│   │   ├── globals.css     # Global styles
-│   │   ├── layout.tsx      # Root layout
-│   │   └── page.tsx        # Home page
+│   ├── app/                 # Next.js App Router (static export)
+│   │   ├── globals.css     # Global styles with design tokens
+│   │   ├── layout.tsx      # Root layout with theme system
+│   │   ├── page.tsx        # Main application page
+│   │   └── providers.tsx   # Global providers (theme, tutorial)
 │   ├── components/         # React components
-│   │   ├── common/         # Shared components
-│   │   ├── map/           # Map integration
-│   │   ├── panels/        # Analysis panels
+│   │   ├── common/         # Shared components (HelpModal, Loading)
+│   │   ├── map/           # Leaflet map integration
+│   │   ├── panels/        # Analysis panels (Soil, NDVI, SamplePoints)
+│   │   ├── tutorial/      # Interactive tutorial system
 │   │   ├── ui/            # shadcn/ui components
-│   │   └── visualizations/ # Charts and plots
-│   └── lib/               # Utilities and configuration
-│       ├── api/           # API client
-│       ├── stores/        # Zustand state management
-│       ├── types/         # TypeScript definitions
-│       └── utils/         # Helper functions
-├── public/                # Static assets
+│   │   └── visualizations/ # Charts, plots, and legends
+│   ├── hooks/             # Custom React hooks
+│   │   └── useURLSync.ts  # URL state synchronization
+│   ├── lib/               # Utilities and configuration
+│   │   ├── api/           # API client with multiple backend support
+│   │   ├── contexts/      # React Context (Theme, Tutorial)
+│   │   ├── stores/        # Zustand state management
+│   │   ├── tutorial/      # Tutorial step definitions
+│   │   ├── types/         # TypeScript interfaces
+│   │   └── utils/         # Helper functions and utilities
+│   └── MainLayout.tsx     # Main application layout
+├── public/                # Static assets (icons, images)
+├── out/                   # Static build output
 ├── package.json          # Dependencies and scripts
-└── next.config.js        # Next.js configuration
+├── next.config.js        # Next.js configuration with static export
 ```
 
 ## 🧰 **Technology Stack**
@@ -107,10 +126,10 @@ ffn-nextjs-app/
 - **React Context** - Theme management
 
 ### **Map & Visualization**
-- **Leaflet** - Interactive maps
+- **Leaflet** - Interactive maps with theme support
 - **Leaflet Draw** - Polygon drawing tools
-- **Recharts** - Data visualization charts
-- **html2canvas + jsPDF** - PDF export functionality
+- **Custom SVG Charts** - Box plots and statistical visualizations
+- **html2canvas + jsPDF** - Comprehensive PDF export with visual components
 
 ### **Development Tools**
 - **ESLint** - Code quality
@@ -120,34 +139,88 @@ ffn-nextjs-app/
 
 ## 🌟 **Key Features**
 
-### **Soil Analysis**
-- Interactive soil property analysis
-- Multiple soil layers (pH, organic matter, clay content, etc.)
-- Custom depth range selection
-- Statistical analysis with box plots
-- PDF report generation with visualizations
+### **Interactive Tutorial System**
+- Step-by-step guided tutorials for farmers
+- Contextual help with visual overlays
+- Progressive disclosure from basic to advanced features
+- Completion tracking and resumable sessions
 
-### **NDVI Analysis**
+### **Enhanced Soil Analysis**
+- Interactive soil property analysis with multiple layers
+- Horizontal box plot visualizations with statistical indicators
+- Zoom-level dependent analysis (polygon vs farmland view)
+- "Analyze All Farmland in View" for high zoom levels
+- Custom depth range selection (0-100cm)
+- Comprehensive PDF export with visual components
+
+### **Advanced NDVI Analysis**
 - Normalized Difference Vegetation Index tracking
-- Time-series visualization
-- Year-over-year comparisons
-- Export capabilities
-- Health status indicators
+- Time-series visualization with custom date ranges
+- Year-over-year comparisons and trend analysis
+- URL state management for sharing analysis sessions
+- Real-time legend and color mapping
 
-### **Map Integration**
-- Interactive Leaflet maps
-- Polygon drawing tools
-- Farmland boundary visualization
-- Zoom-dependent analysis options
-- Real-time data overlay
+### **Smart Map Integration**
+- Theme-aware Leaflet maps (light/dark mode)
+- Advanced polygon drawing tools with area calculation
+- Farmland boundary visualization with blue styling
+- Dynamic analysis options based on zoom level
+- GPS location services and coordinate display
+- Dataset selection with California regions
 
-### **Data Export**
-- Comprehensive PDF reports
-- Location details and WKT geometry
-- Chart and map visualizations
-- Statistical summaries
+### **Professional Reports & Export**
+- Comprehensive PDF reports with location details
+- WKT geometry strings and bounding box coordinates
+- Visual component capture (charts, legends, soil images)
+- Statistical summaries with key metrics
+- Professional formatting with automatic page breaks
+
+### **User Experience**
+- Modern responsive design with 8pt grid system
+- Dark/light theme with CSS design tokens
+- Toast notifications with dismiss functionality
+- URL state synchronization for sharing sessions
+- Collapsible sidebar with organized analysis tabs
+- Error boundaries and loading states
 
    
+## 🏗️ **Architecture Overview**
+
+The system integrates with a hybrid backend architecture:
+
+- **Java/Scala Backend (Port 8890)** - Primary processing engine using Beast/Spark
+- **Python WSGI Backend (Port 8081/8082)** - Specialized geospatial operations
+- **React Frontend** - Interactive map visualization and analysis
+
+### **API Integration**
+
+Key endpoints:
+- `GET /vector/datasets` - Available vector datasets
+- `POST /soil/aggregatestats.json` - Soil statistics analysis
+- `POST /soil/farmland.json` - Farmland soil analysis by bounding box
+- `POST /ndvi/timeseries.json` - NDVI time series data
+- `POST /vectors/farmland.geojson` - Farmland boundary data
+
+## 📊 **Data Sources**
+
+- **California Farmland Vector Data** - High-resolution farmland boundaries
+- **Satellite Soil Salinity Data** - Multi-depth soil property measurements
+- **Landsat 8/9 NDVI Data** - Vegetation index time series
+- **Sentinel-2 NDVI Data** - High-resolution vegetation monitoring
+
+## 🚀 **Deployment Options**
+
+### **Production Deployment**
+
+1. **Automated Daily Deployment** - Server-side cron job with GitHub integration
+2. **Webhook Deployment** - Immediate deployment on code pushes
+3. **Manual Deployment** - Two-stage deployment via bolt.cs.ucr.edu
+
+All deployment methods include:
+- Automatic backup and rollback capabilities
+- Build verification and dependency management
+- Comprehensive logging and monitoring
+
 ## 📄 **License**
 
 Copyright 2025 University of California, Riverside

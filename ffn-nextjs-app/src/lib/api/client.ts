@@ -11,6 +11,8 @@ import {
   SoilAnalysisParams,
   NDVIAnalysisParams,
   SoilSampleParams,
+  NDVIImageParams,
+  NDVIImagesResponse,
   APIError
 } from '@/lib/types/api'
 
@@ -216,6 +218,25 @@ class APIClient {
     const response: AxiosResponse<NDVIMultiPolygonResponse> = await this.client.get(
       `/ndvi/${vectorId}.json`,
       { params }
+    )
+    return response.data
+  }
+
+  /**
+   * Get NDVI images as base64 for date range
+   */
+  async getNDVIImages(params: NDVIImageParams): Promise<NDVIImagesResponse> {
+    const queryParams = new URLSearchParams({
+      from: params.from,
+      to: params.to
+    })
+
+    const response: AxiosResponse<NDVIImagesResponse> = await this.client.post(
+      `/ndvi/images.json?${queryParams}`,
+      JSON.stringify(params.geometry),
+      {
+        headers: { 'Content-Type': 'text/plain' }
+      }
     )
     return response.data
   }

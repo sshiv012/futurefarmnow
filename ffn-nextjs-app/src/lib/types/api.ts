@@ -112,6 +112,40 @@ export interface SoilSampleParams {
   geometry: GeoJSONGeometry
 }
 
+export interface NDVIImageMetadata {
+  min: number
+  max: number
+  mean: number
+  pixels: number
+}
+
+export interface NDVIImageMetaResponse {
+  token: string
+  polygon_hash: string
+  available_dates: string[]
+  statistics_per_date: Record<string, NDVIImageMetadata>
+}
+
+export interface NDVIImageParams {
+  from: string
+  to: string
+  geometry: GeoJSONGeometry
+}
+
+export interface NDVIImageData {
+  date: string
+  image: string // base64 encoded image
+}
+
+export interface NDVIImagesResponse {
+  engine: string
+  query: {
+    from: string
+    to: string
+  }
+  images: NDVIImageData[]
+}
+
 export interface APIError {
   message: string
   code?: string

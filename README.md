@@ -204,13 +204,13 @@ To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soi
 
 ## Client Deployment (Next.js Application)
 
-The new Next.js client provides a modern web interface for the FutureFarmNow platform. Follow these steps to deploy it for the first time.
+The Next.js client provides a modern web interface for the FutureFarmNow platform. Follow these steps to deploy it as static files.
 
 ### Prerequisites
 
 - **Node.js 18.17 or later** - [Download](https://nodejs.org/)
 - **npm 9 or later** (comes with Node.js)
-- Web server (Apache/Nginx) or hosting platform (Vercel/Netlify)
+- Access to your web server directory
 
 ### Local Development Setup
 
@@ -237,96 +237,21 @@ The new Next.js client provides a modern web interface for the FutureFarmNow pla
    Open [http://localhost:3000](http://localhost:3000) to view the application.
 
 ### Production Deployment
-#### Deploy to Apache/Nginx
 
-1. **Build the application**
+1. **Build the application for static export**
    ```bash
    cd ffn-nextjs-app
    npm run build
    ```
 
-2. **Export static files** (if using static hosting)
-   ```bash
-   npm run export
+2. **Deploy static files to server**
+   ```bash   
+   # using scp for remote deployment
+   scp -r out/* user@server:/var/www/sites/raptor.cs.ucr.edu/public_html/
    ```
 
-3. **Copy files to web server**
-   ```bash
-   # For static export
-   sudo cp -r out/* /var/www/ffn.example.com/public_html/
+**Note:** The application is configured for static deployment and will work with any web server that can serve static files. No additional web server configuration is required as the Next.js build process creates all necessary static assets.
 
-   # For Node.js deployment
-   sudo cp -r .next package.json package-lock.json /var/www/ffn.example.com/client/
-   cd /var/www/ffn.example.com/client
-   npm install --production
-   ```
-
-4. **Configure web server**
-
-   **For Apache (static):**
-   ```apache
-   <VirtualHost *:80>
-       ServerName ffn.example.com
-       DocumentRoot /var/www/ffn.example.com/public_html
-       
-       # Enable client-side routing
-       <Directory /var/www/ffn.example.com/public_html>
-           RewriteEngine On
-           RewriteBase /
-           RewriteRule ^index\.html$ - [L]
-           RewriteCond %{REQUEST_FILENAME} !-f
-           RewriteCond %{REQUEST_FILENAME} !-d
-           RewriteRule . /index.html [L]
-       </Directory>
-   </VirtualHost>
-   ```
-
-   **For Nginx (static):**
-   ```nginx
-   server {
-       listen 80;
-       server_name ffn.example.com;
-       root /var/www/ffn.example.com/public_html;
-       index index.html;
-
-       location / {
-           try_files $uri $uri/ /index.html;
-       }
-   }
-   ```
-
-5. **Set up Node.js service** (if using Node.js deployment)
-   ```bash
-   # Create systemd service file
-   sudo nano /etc/systemd/system/ffn-client.service
-   ```
-   
-   Add the following content:
-   ```ini
-   [Unit]
-   Description=FutureFarmNow Next.js Client
-   After=network.target
-
-   [Service]
-   Type=simple
-   User=www-data
-   Group=www-data
-   WorkingDirectory=/var/www/ffn.example.com/client
-   ExecStart=/usr/bin/npm start
-   Restart=on-failure
-   Environment=NODE_ENV=production
-   Environment=NEXT_PUBLIC_API_BASE_URL=https://ffn.example.com/futurefarmnow-backend-0.3-RC1
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-6. **Enable and start the service**
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable ffn-client
-   sudo systemctl start ffn-client
-   ```
 
 ### Configuration
 

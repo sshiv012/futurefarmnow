@@ -1,6 +1,7 @@
 'use client'
 
 import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -44,7 +45,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
         </div>
         <div className="flex items-center space-x-1" data-tutorial="sidebar-controls">
           {!isCollapsed && <ThemeToggle />}
-          
+
           {/* Desktop expand toggle */}
           {!isCollapsed && (
             <Button
@@ -61,7 +62,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               )}
             </Button>
           )}
-          
+
           {/* Desktop collapse toggle */}
           <Button
             variant="ghost"
@@ -76,7 +77,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               <ChevronLeft className="h-4 w-4" />
             )}
           </Button>
-          
+
           {/* Mobile close button */}
           {onClose && (
             <Button
@@ -122,7 +123,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               <HelpCircle className="h-4 w-4 mr-2" />
               Help
             </Button>
-            
+
             <Button
               variant="outline"
               size="sm"
@@ -133,7 +134,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               Clear Analysis
             </Button>
           </div>
-          
+
           {/* Tutorial Button */}
           <Button
             variant="default"
@@ -158,7 +159,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               <MapPin className="h-5 w-5 text-muted-foreground" />
             )}
           </div>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -241,11 +242,11 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
                 <TabsContent value="soil" active={activeTab === 'soil'} data-tutorial="soil-panel">
                   <SoilAnalysis />
                 </TabsContent>
-                
+
                 <TabsContent value="ndvi" active={activeTab === 'ndvi'} data-tutorial="ndvi-panel">
                   <NDVIAnalysis />
                 </TabsContent>
-                
+
                 <TabsContent value="sample" active={activeTab === 'sample'}>
                   <SamplePoints />
                 </TabsContent>
@@ -254,9 +255,31 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t text-center text-xs text-muted-foreground">
-            <p>© 2025 FutureFarmNow</p>
-            <p>University of California, Riverside</p>
+          <div className="p-4 border-t space-y-3">
+            <div className="flex items-center justify-center space-x-3">
+              <Image
+                src="/UCR_logo.png"
+                alt="UC Riverside"
+                width={120}
+                height={32}
+                className="h-8 w-auto"
+                priority
+              />
+              <a
+                href="https://ai4sa.ucr.edu"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium transition-colors"
+              >
+                AI4SA
+              </a>
+            </div>
+
+            {/* Copyright */}
+            <div className="text-center text-xs text-muted-foreground">
+              <p>© 2025 FutureFarmNow</p>
+              <p>University of California, Riverside</p>
+            </div>
           </div>
         </>
       )}

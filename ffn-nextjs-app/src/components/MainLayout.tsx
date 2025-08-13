@@ -33,38 +33,45 @@ export function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background main-container" data-tutorial="main-container">
+    <div className="h-screen overflow-hidden bg-background main-container" data-tutorial="main-container" style={{ position: 'relative' }}>
       {/* Tutorial system */}
       <TutorialOverlay />
       <TutorialBodyClass />
-      {/* Mobile menu button */}
-      <div className="fixed top-4 left-4 z-50 md:hidden">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="bg-background shadow-md border"
+      
+      {/* Menu button - show when sidebar is closed */}
+      {!sidebarOpen && (
+        <div className="fixed top-4 left-4" style={{ zIndex: 10000 }}>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setSidebarOpen(true)}
+            className="bg-background shadow-md border"
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Sidebar - Always fixed positioned */}
+      {sidebarOpen && (
+        <aside 
+          className="fixed inset-y-0 left-0 shadow-lg bg-background animate-in slide-in-from-left duration-300" 
+          style={{ 
+            zIndex: 9999,
+            backgroundColor: 'var(--background)',
+            border: '1px solid var(--border)'
+          }}
         >
-          <Menu className="h-4 w-4" />
-        </Button>
-      </div>
+          <Sidebar 
+            onClose={() => setSidebarOpen(false)}
+            onShowHelp={() => setHelpModalOpen(true)}
+            onClearAnalysis={handleClearAnalysis}
+            onStartTutorial={startTutorial}
+          />
+        </aside>
+      )}
 
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 transform shadow-lg transition-transform duration-300 ease-in-out md:relative md:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <Sidebar 
-          onClose={() => setSidebarOpen(false)}
-          onShowHelp={() => setHelpModalOpen(true)}
-          onClearAnalysis={handleClearAnalysis}
-          onStartTutorial={startTutorial}
-        />
-      </aside>
-
-      {/* Mobile overlay */}
+      {/* Overlay - show on mobile when sidebar is open */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black bg-opacity-25 md:hidden"
@@ -72,8 +79,8 @@ export function MainLayout() {
         />
       )}
 
-      {/* Main content - Map */}
-      <main className="flex-1 relative" data-tutorial="map-container">
+      {/* Main content - Map (always full width, sidebar overlays it) */}
+      <main className="h-full w-full" data-tutorial="map-container">
         <MapContainer />
       </main>
 
