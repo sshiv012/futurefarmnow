@@ -235,10 +235,17 @@ def split_date_range(start_date, end_date):
 
     return ranges
 
-def calculate_ndvi(nir, red):
+def calculate_ndvi(nir, red, nir_nodata=None, red_nodata=None):
     """Calculate NDVI from NIR and Red bands, normalize, and rescale."""
     nir = nir.astype(float)
     red = red.astype(float)
+
+    # Create mask for noData pixels
+    nodata_mask = np.zeros(nir.shape, dtype=bool)
+    if nir_nodata is not None:
+        nodata_mask |= (nir == nir_nodata)
+    if red_nodata is not None:
+        nodata_mask |= (red == red_nodata)
 
     # Avoid division by zero
     np.seterr(divide="ignore", invalid="ignore")
@@ -252,9 +259,12 @@ def calculate_ndvi(nir, red):
         numerator / denominator  # Otherwise, compute NDVI as usual
     )
 
-    # Rescale from [-1, 1] to [1, 255] (keep 0 for invalid pixels)
-    ndvi_rescaled = np.round(1+(ndvi + 1.0) * 127)
-    ndvi_rescaled[np.isnan(ndvi)] = 0
+    # Rescale from [-1, 1] to [0, 254] for valid pixels (reserve 255 for noData)
+    ndvi_rescaled = np.round((ndvi + 1.0) * 127)
+    ndvi_rescaled[np.isnan(ndvi)] = 255
+    
+    # Preserve noData pixels as 255 in output
+    ndvi_rescaled[nodata_mask] = 255
     ndvi_rescaled = ndvi_rescaled.astype(np.uint8)
 
     return ndvi_rescaled
@@ -267,11 +277,13 @@ def calculate_ndvi_from_bands(red_path, nir_path, output_path):
     with rasterio.open(nir_path) as src_nir, rasterio.open(red_path) as src_red:
         nir = src_nir.read(1, resampling=Resampling.bilinear)
         red = src_red.read(1, resampling=Resampling.bilinear)
+        nir_nodata = src_nir.nodata
+        red_nodata = src_red.nodata
         meta = src_nir.meta.copy()
-        meta.update({"driver": "GTiff", "dtype": "uint8", "compress": "JPEG", "nodata": 0})
+        meta.update({"driver": "GTiff", "dtype": "uint8", "compress": "JPEG", "nodata": 255})
 
-    # Calculate NDVI
-    ndvi = calculate_ndvi(nir, red)
+    # Calculate NDVI with proper noData handling
+    ndvi = calculate_ndvi(nir, red, nir_nodata, red_nodata)
 
     # Save NDVI as a compressed GeoTIFF
     with rasterio.open(output_path, "w", **meta) as dst:
