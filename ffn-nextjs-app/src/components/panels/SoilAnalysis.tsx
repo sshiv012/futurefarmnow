@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Select, SelectOption } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
@@ -12,7 +11,7 @@ import { SoilLayerEnum, GeoJSONGeometry } from '@/lib/types/api'
 import { BoxWhiskerPlot } from '@/components/visualizations/BoxWhiskerPlot'
 import { Legend } from '@/components/visualizations/Legend'
 import { SoilLegend } from '@/components/visualizations/SoilLegend'
-import { AlertCircle, BarChart3, MapPin, Image as ImageIcon, X, Download, RotateCcw, Layers } from 'lucide-react'
+import { AlertCircle, BarChart3, MapPin, X, Download, RotateCcw, Layers } from 'lucide-react'
 import { toast } from '@/lib/utils/toast'
 
 const SOIL_LAYERS: { value: SoilLayerEnum; label: string; description: string }[] = [
@@ -998,39 +997,6 @@ export function SoilAnalysis() {
             </div>
           </div>
 
-          {/* Soil Visualization Image */}
-          {soilImageUrl && (
-            <div className="bg-card p-4 rounded-lg border space-y-4">
-              <h4 className="font-medium text-foreground mb-3 flex items-center">
-                <ImageIcon className="h-4 w-4 mr-2" />
-                Soil Map Visualization
-              </h4>
-              
-              <div className="bg-muted/20 p-4 rounded-lg">
-                <Image 
-                  src={soilImageUrl} 
-                  alt={`Soil ${SOIL_LAYERS.find(l => l.value === selectedSoilLayer)?.label} visualization`}
-                  className="w-full h-auto rounded border shadow-sm"
-                  style={{ maxHeight: '400px', objectFit: 'contain' }}
-                  width={800}
-                  height={400}
-                  unoptimized
-                />
-                <div className="mt-2 text-xs text-muted-foreground text-center">
-                  Color-coded map showing {SOIL_LAYERS.find(l => l.value === selectedSoilLayer)?.label.toLowerCase()} 
-                  values across your selected area
-                </div>
-              </div>
-              
-              <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border-l-4 border-green-400">
-                <div className="text-sm text-green-800 dark:text-green-200">
-                  <strong>🗺️ How to read this map:</strong> Different colors represent different soil values. 
-                  Use this visual alongside the numbers above to identify patterns and plan targeted treatments for your field.
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Soil Value Legend */}
           {soilImageUrl && results && (
             <SoilLegend 
@@ -1038,6 +1004,16 @@ export function SoilAnalysis() {
               min={results.min}
               max={results.max}
             />
+          )}
+
+          {/* How to read the map - Only with polygon results */}
+          {soilImageUrl && results && (
+            <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border-l-4 border-green-400">
+              <div className="text-sm text-green-800 dark:text-green-200">
+                <strong>🗺️ How to read the map:</strong> Different colors on the map represent different soil values. 
+                Use the colored overlay on the map alongside the analysis results above to identify patterns and plan targeted treatments for your field.
+              </div>
+            </div>
           )}
 
           {/* Loading indicator for image */}
@@ -1076,21 +1052,13 @@ export function SoilAnalysis() {
             </div>
           </div>
 
-          {/* Only show the scale/legend for farmland analysis */}
-          {farmlandResults?.min !== undefined && farmlandResults?.max !== undefined ? (
+          {/* Farmland Analysis Legend */}
+          {farmlandResults?.min !== undefined && farmlandResults?.max !== undefined && (
             <SoilLegend 
               soilLayer={SOIL_LAYERS.find(l => l.value === selectedSoilLayer)?.label || selectedSoilLayer}
               min={farmlandResults.min}
               max={farmlandResults.max}
             />
-          ) : (
-            !farmlandAnalysisMutation.isPending && (
-              <div className="bg-card p-4 rounded-lg border">
-                <div className="text-sm text-muted-foreground">
-                  Waiting for analysis results...
-                </div>
-              </div>
-            )
           )}
 
           <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border-l-4 border-blue-400">
@@ -1122,6 +1090,7 @@ export function SoilAnalysis() {
           <Legend data={legendData} />
         </div>
       )}
+
     </div>
   )
 }

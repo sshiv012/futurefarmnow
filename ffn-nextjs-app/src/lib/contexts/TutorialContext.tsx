@@ -108,28 +108,3 @@ export function useTutorial() {
   return context
 }
 
-// Hook to check if tutorial has been completed
-export function useTutorialStatus() {
-  const [hasCompletedTutorial, setHasCompletedTutorial] = useState(false)
-
-  React.useEffect(() => {
-    const completed = localStorage.getItem('ffn-tutorial-completed') === 'true'
-    setHasCompletedTutorial(completed)
-  }, [])
-
-  const markTutorialCompleted = () => {
-    localStorage.setItem('ffn-tutorial-completed', 'true')
-    setHasCompletedTutorial(true)
-  }
-
-  const resetTutorial = () => {
-    localStorage.removeItem('ffn-tutorial-completed')
-    setHasCompletedTutorial(false)
-  }
-
-  return {
-    hasCompletedTutorial,
-    markTutorialCompleted,
-    resetTutorial
-  }
-}

@@ -435,6 +435,88 @@ paths:
               schema:
                 $ref: '#/components/schemas/NDVIMultiPolygonResponse'
 
+  /ndvi/image.png:
+    post:
+      summary: Get NDVI image for a single geometry
+      description: Generates and returns a PNG image with NDVI visualization for a specific date and geometry using the gray-red-orange-yellow-green color scale.
+      tags:
+        - NDVI Data
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Specific date for NDVI visualization.
+          schema:
+            type: string
+            format: date
+            example: "2024-01-15"
+        - name: source
+          in: query
+          required: false
+          description: Data source for NDVI data.
+          schema:
+            type: string
+            enum: [ndvi, landsat]
+            default: ndvi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image with NDVI visualization using color-coded scale.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No data found for the specified date.
+        '500':
+          description: Error generating NDVI image.
+    get:
+      summary: Get NDVI image for a single geometry (GET)
+      description: Generates and returns a PNG image with NDVI visualization for a specific date and geometry. GET is supported for compatibility.
+      tags:
+        - NDVI Data
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Specific date for NDVI visualization.
+          schema:
+            type: string
+            format: date
+            example: "2024-01-15"
+        - name: source
+          in: query
+          required: false
+          description: Data source for NDVI data.
+          schema:
+            type: string
+            enum: [ndvi, landsat]
+            default: ndvi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image with NDVI visualization using color-coded scale.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No data found for the specified date.
+        '500':
+          description: Error generating NDVI image.
+
 components:
   schemas:
     VectorInfo:

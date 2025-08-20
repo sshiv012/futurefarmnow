@@ -168,6 +168,16 @@ ffn-nextjs-app/
 - GPS location services and coordinate display
 - Dataset selection with California regions
 
+### **Smart Soil Sampling**
+- GPS-optimized sampling point generation for field testing
+- Interactive map visualization with numbered sampling locations
+- Multiple soil property layer selection (alpha, clay, sand, silt, pH, etc.)
+- Customizable sampling density (5, 7, 10, or 12 points)
+- Depth range configuration (surface to 2+ feet deep)
+- Statistical accuracy assessment for sampling reliability
+- CSV export for GPS device navigation
+- Real-time sampling accuracy analysis
+
 ### **Professional Reports & Export**
 - Comprehensive PDF reports with location details
 - WKT geometry strings and bounding box coordinates
@@ -198,8 +208,56 @@ Key endpoints:
 - `GET /vector/datasets` - Available vector datasets
 - `POST /soil/aggregatestats.json` - Soil statistics analysis
 - `POST /soil/farmland.json` - Farmland soil analysis by bounding box
+- `POST /soil/sample.json` - Smart soil sampling point generation
 - `POST /ndvi/timeseries.json` - NDVI time series data
 - `POST /vectors/farmland.geojson` - Farmland boundary data
+
+### **Technical Implementation Details**
+
+#### **Soil Sampling Accuracy Calculation**
+
+The soil sampling accuracy assessment uses percentage difference between sample statistics and field-wide statistics:
+
+```javascript
+// Calculate percentage difference between sample mean and field-wide mean
+const accuracy = Math.abs(stats.sample.mean - stats.actual.mean) / stats.actual.mean * 100
+
+// Accuracy classification thresholds
+const accuracyStatus = accuracy < 5 ? 'Excellent' : 
+                      accuracy < 10 ? 'Good' : 
+                      accuracy < 20 ? 'Fair' : 'Poor'
+```
+
+**Accuracy Classifications:**
+- **Excellent (< 5%)**: Sample mean within 5% of field-wide mean
+- **Good (5-10%)**: Sample mean within 5-10% of field-wide mean  
+- **Fair (10-20%)**: Sample mean within 10-20% of field-wide mean
+- **Poor (> 20%)**: Sample mean differs by more than 20% from field-wide mean
+
+**Example:** If field-wide average pH is 6.0 and sample average is 6.2:
+- Accuracy = |6.2 - 6.0| / 6.0 × 100 = 3.33%
+- Classification = "Excellent" (< 5% difference)
+
+This methodology helps farmers understand how representative their soil sampling strategy is for making field-wide management decisions.
+
+#### **Map Marker Implementation**
+
+Soil sampling points are displayed as interactive map markers:
+
+```javascript
+// Blue circular markers with white ID numbers
+const marker = L.circleMarker([point.y, point.x], {
+  radius: 12,
+  fillColor: '#3b82f6',
+  color: '#1e40af',
+  weight: 2,
+  opacity: 1,
+  fillOpacity: 0.8
+})
+
+// Hover tooltips with precise GPS coordinates
+marker.bindTooltip(`Sample Point ${point.id}<br/>Lat: ${lat}<br/>Lng: ${lng}`)
+```
 
 ## 📊 **Data Sources**
 

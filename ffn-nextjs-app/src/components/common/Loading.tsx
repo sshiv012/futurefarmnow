@@ -26,18 +26,3 @@ export function Loading({ size = 'md', text, className }: LoadingProps) {
   )
 }
 
-export function LoadingOverlay({ text }: { text?: string }) {
-  return (
-    <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10">
-      <Loading size="lg" text={text} />
-    </div>
-  )
-}
-
-export function LoadingCard({ text, className }: { text?: string; className?: string }) {
-  return (
-    <div className={cn('bg-white border rounded-lg p-8', className)}>
-      <Loading size="lg" text={text} />
-    </div>
-  )
-}

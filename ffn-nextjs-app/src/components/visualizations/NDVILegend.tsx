@@ -22,26 +22,22 @@ export function NDVILegend({ min, max }: NDVILegendProps) {
     )
   }
 
-  // Generate NDVI color gradient stops
+  // Generate NDVI color gradient stops using the new color scale
   const generateNDVIColorStops = () => {
-    const steps = 8
-    const colors = []
-    for (let i = 0; i < steps; i++) {
-      const ratio = i / (steps - 1)
-      const value = min + (ratio * (max - min))
-      colors.push({
-        color: ndviToColor(value),
-        value: value,
-        label: getNDVILabel(value)
-      })
-    }
-    return colors
+    const breakpoints = [0.0, 0.07, 0.15, 0.23, 0.3, 0.37, 0.45, 0.51, 0.58, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0]
+    return breakpoints.map(value => ({
+      color: ndviToColor(value),
+      value: value,
+      label: getNDVILabel(value)
+    }))
   }
 
   // Get health label for NDVI value
   const getNDVILabel = (ndvi: number): string => {
-    if (ndvi < 0.2) return 'Poor'
-    if (ndvi < 0.5) return 'Moderate'
+    if (ndvi <= 0.07) return 'No Vegetation'
+    if (ndvi <= 0.3) return 'Poor'
+    if (ndvi <= 0.5) return 'Moderate'
+    if (ndvi <= 0.7) return 'Good'
     return 'Excellent'
   }
 
@@ -73,36 +69,53 @@ export function NDVILegend({ min, max }: NDVILegendProps) {
       </div>
       
       {/* Health status indicators */}
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-5 gap-1 text-xs">
         <div className="flex flex-col items-center space-y-1">
           <div 
-            className="w-4 h-4 rounded border border-foreground/20"
-            style={{ backgroundColor: ndviToColor(0.1) }}
+            className="w-3 h-3 rounded border border-foreground/20"
+            style={{ backgroundColor: ndviToColor(0.03) }}
           />
-          <span className="text-red-600 font-medium">Poor</span>
-          <span className="text-muted-foreground">0.0 - 0.2</span>
+          <span className="text-gray-600 font-medium text-center">None</span>
+          <span className="text-muted-foreground">0.0-0.07</span>
         </div>
         <div className="flex flex-col items-center space-y-1">
           <div 
-            className="w-4 h-4 rounded border border-foreground/20"
-            style={{ backgroundColor: ndviToColor(0.35) }}
+            className="w-3 h-3 rounded border border-foreground/20"
+            style={{ backgroundColor: ndviToColor(0.2) }}
           />
-          <span className="text-yellow-600 font-medium">Moderate</span>
-          <span className="text-muted-foreground">0.2 - 0.5</span>
+          <span className="text-red-600 font-medium text-center">Poor</span>
+          <span className="text-muted-foreground">0.07-0.3</span>
         </div>
         <div className="flex flex-col items-center space-y-1">
           <div 
-            className="w-4 h-4 rounded border border-foreground/20"
-            style={{ backgroundColor: ndviToColor(0.7) }}
+            className="w-3 h-3 rounded border border-foreground/20"
+            style={{ backgroundColor: ndviToColor(0.4) }}
           />
-          <span className="text-green-600 font-medium">Excellent</span>
-          <span className="text-muted-foreground">0.5 - 1.0</span>
+          <span className="text-yellow-600 font-medium text-center">Moderate</span>
+          <span className="text-muted-foreground">0.3-0.5</span>
+        </div>
+        <div className="flex flex-col items-center space-y-1">
+          <div 
+            className="w-3 h-3 rounded border border-foreground/20"
+            style={{ backgroundColor: ndviToColor(0.6) }}
+          />
+          <span className="text-lime-600 font-medium text-center">Good</span>
+          <span className="text-muted-foreground">0.5-0.7</span>
+        </div>
+        <div className="flex flex-col items-center space-y-1">
+          <div 
+            className="w-3 h-3 rounded border border-foreground/20"
+            style={{ backgroundColor: ndviToColor(0.85) }}
+          />
+          <span className="text-green-600 font-medium text-center">Excellent</span>
+          <span className="text-muted-foreground">0.7-1.0</span>
         </div>
       </div>
       
       <div className="text-xs text-muted-foreground">
-        <strong>Legend:</strong> Red indicates poor vegetation health, yellow is moderate, and green shows excellent crop health. 
-        Click on farmland boundaries to see detailed time series data.
+        <strong>🗺️ How to read the map:</strong> Gray indicates no vegetation, red shows poor crop health, 
+        yellow-orange represents moderate growth, and green shows excellent vegetation health. 
+        Darker green indicates denser, healthier crops.
       </div>
     </div>
   )

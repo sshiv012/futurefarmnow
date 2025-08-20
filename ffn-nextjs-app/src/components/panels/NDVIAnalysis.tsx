@@ -3,20 +3,21 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectOption } from '@/components/ui/select'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useMutation } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api/client'
 import { TimeSeriesChart } from '@/components/visualizations/TimeSeriesChart'
 import { NDVILegend } from '@/components/visualizations/NDVILegend'
-import { NDVITimeSlider } from '@/components/visualizations/NDVITimeSlider'
 import { AlertCircle, Calendar, Download, GitCompare } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { formatDateString, parseDate } from '@/lib/utils'
+import { GeoJSONGeometry } from '@/lib/types/api'
 
 export function NDVIAnalysis() {
   const {
     selectedDateRange,
-    drawnPolygon,
+    drawnPolygons,
     currentZoom,
     currentBounds,
     selectedDataset,
@@ -33,7 +34,7 @@ export function NDVIAnalysis() {
   const [farmlandResults, setFarmlandResults] = useState<any>(null) // Store individual farmland data
   const [comparisonYear, setComparisonYear] = useState<string>('')
   const [isComparison, setIsComparison] = useState(false)
-  
+
   // Time slider states
   const [imageMetadata, setImageMetadata] = useState<any>(null)
   const [currentSliderDate, setCurrentSliderDate] = useState<string>('')
@@ -41,7 +42,52 @@ export function NDVIAnalysis() {
   const [imageCache, setImageCache] = useState<Map<string, string>>(new Map())
   const [isLoadingImage, setIsLoadingImage] = useState(false)
   const [showTimeSlider, setShowTimeSlider] = useState(false)
+  const [isChangingImage, setIsChangingImage] = useState(false)
+  const [isInitialLoading, setIsInitialLoading] = useState(false)
 
+  // Data source selection
+  const [dataSource, setDataSource] = useState<string>('ndvi')
+
+  // Calculate MBR (Minimum Bounding Rectangle) for multiple polygons
+  const calculateMultiPolygonBounds = useCallback((polygons: GeoJSONGeometry[]): [[number, number], [number, number]] | null => {
+    if (!polygons || polygons.length === 0) return null
+    
+    let minLat = Infinity, maxLat = -Infinity
+    let minLng = Infinity, maxLng = -Infinity
+    
+    polygons.forEach((polygon) => {
+      if (polygon && polygon.coordinates && Array.isArray(polygon.coordinates) && polygon.coordinates[0]) {
+        const coords = polygon.coordinates[0] as [number, number][] // First ring of polygon
+        if (Array.isArray(coords)) {
+          coords.forEach(([lng, lat]: [number, number]) => {
+            minLat = Math.min(minLat, lat)
+            maxLat = Math.max(maxLat, lat)
+            minLng = Math.min(minLng, lng)
+            maxLng = Math.max(maxLng, lng)
+          })
+        }
+      }
+    })
+    
+    return [[minLat, minLng], [maxLat, maxLng]]
+  }, [])
+
+  // Clear results and cache when data source changes
+  useEffect(() => {
+    // Clear all NDVI results and images when switching data sources
+    setResults(null)
+    setComparisonResults(null)
+    setFarmlandResults(null)
+    setIsComparison(false)
+    setImageMetadata(null)
+    setCurrentSliderDate('')
+    setCurrentImageUrl('')
+    setImageCache(new Map())
+    setShowTimeSlider(false)
+    setNDVIImageOverlay(null, null)
+    setAnalyzingType(null)
+    setIsInitialLoading(false)
+  }, [dataSource, setNDVIImageOverlay])
 
   // Clear state when clearTrigger changes
   useEffect(() => {
@@ -59,6 +105,7 @@ export function NDVIAnalysis() {
       setIsLoadingImage(false)
       setShowTimeSlider(false)
       setNDVIImageOverlay(null, null)
+      setIsInitialLoading(false)
     }
   }, [clearTrigger, setNDVIImageOverlay])
 
@@ -71,22 +118,109 @@ export function NDVIAnalysis() {
     }
   }, [results, selectedDateRange.from, comparisonYear])
 
+  // Function to load a single image for a specific date
+  const loadImageForDate = useCallback(async (date: string, showOnMap: boolean = false) => {
+    if (!drawnPolygons || drawnPolygons.length === 0) return null
+
+    // Create geometry - MultiPolygon if multiple polygons, single polygon if one
+    let geometry: GeoJSONGeometry;
+    if (drawnPolygons.length === 1) {
+      geometry = drawnPolygons[0];
+    } else {
+      // Combine multiple polygons into a MultiPolygon
+      geometry = {
+        type: 'MultiPolygon',
+        coordinates: drawnPolygons.map(polygon => polygon.coordinates)
+      } as GeoJSONGeometry;
+    }
+
+    try {
+      const imageBlob = await apiClient.getNDVIImage({
+        date,
+        geometry,
+        source: dataSource
+      })
+
+      // Convert blob to data URL
+      const imageUrl = URL.createObjectURL(imageBlob)
+      const dataUrl = await new Promise<string>((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0)
+          resolve(canvas.toDataURL('image/png'))
+        }
+        img.src = imageUrl
+      })
+
+      // Clean up blob URL
+      URL.revokeObjectURL(imageUrl)
+
+      // Cache the image
+      setImageCache(prev => new Map(prev).set(date, dataUrl))
+
+      // Show on map if requested
+      if (showOnMap) {
+        setCurrentSliderDate(date)
+        setCurrentImageUrl(dataUrl)
+        setShowTimeSlider(true)
+
+        // Calculate bounds for multiple polygons and show overlay
+        const bounds = calculateMultiPolygonBounds(drawnPolygons)
+        if (bounds) {
+          const timestampedUrl = `${dataUrl}#${Date.now()}`
+          setNDVIImageOverlay(timestampedUrl, bounds)
+        }
+      }
+
+      return dataUrl
+    } catch (error) {
+      console.error(`Failed to load image for date ${date}:`, error)
+      return null
+    }
+  }, [drawnPolygons, dataSource, setImageCache, setCurrentSliderDate, setCurrentImageUrl, setShowTimeSlider, setNDVIImageOverlay, calculateMultiPolygonBounds])
+
+  // Function to load remaining images asynchronously in parallel
+  const loadRemainingImagesAsync = async (dates: string[]) => {
+    if (!drawnPolygons || drawnPolygons.length === 0 || dates.length === 0) return
+
+    // Set up metadata with available dates
+    const allDates = [currentSliderDate, ...dates].filter(Boolean).sort()
+    setImageMetadata({
+      available_dates: allDates,
+      token: 'simplified',
+      polygon_hash: 'simplified',
+      statistics_per_date: {}
+    })
+
+    // Load images in parallel and wait for completion
+    const promises = dates.map(date => loadImageForDate(date, false)) // No map show for parallel loading
+    await Promise.all(promises)
+    
+    // All images loaded
+    setIsInitialLoading(false)
+    toast.success('All satellite images loaded!')
+  }
+
   const ndviAnalysisMutation = useMutation({
     mutationFn: async (params: any) => {
       if (params.isFarmlandAnalysis) {
-        return await apiClient.getNDVIForRegion('farmland', params.from, params.to, params.bbox)
+        return await apiClient.getNDVIForRegion('farmland', params.from, params.to, params.bbox, params.source)
       }
       return await apiClient.getNDVIForPolygon(params)
     },
-    onSuccess: (data: any) => {
+    onSuccess: async (data: any) => {
       const resultsData = data.results || data
-      
+
       // Handle different result structures
       if (Array.isArray(resultsData) && resultsData.length > 0 && resultsData[0].objectid) {
         // Farmland analysis: array of {objectid, results: [...]} 
         // Store individual farmland data for popups
         setFarmlandResults(resultsData)
-        
+
         // Flatten all time series data from all farmlands for charts/tables
         const allTimePoints: any[] = []
         resultsData.forEach((farmland: any) => {
@@ -100,7 +234,7 @@ export function NDVIAnalysis() {
           }
         })
         setResults(allTimePoints)
-        
+
         // Also fetch and display farmland boundaries with NDVI data for popups
         if (currentBounds) {
           // Calculate min/max NDVI values for legend
@@ -137,7 +271,7 @@ export function NDVIAnalysis() {
               // Still show results even if GeoJSON fails
             })
         }
-        
+
         setAnalyzingType(null)
         const farmlandCount = resultsData.length
         const totalPoints = allTimePoints.length
@@ -150,6 +284,18 @@ export function NDVIAnalysis() {
         const dataCount = Array.isArray(resultsData) ? resultsData.length : 0
         if (dataCount > 0) {
           toast.success(`Found crop health data for ${dataCount} time points!`)
+          
+          // After getting time series data, load the first image for the first available date
+          if (drawnPolygons && drawnPolygons.length > 0 && dataCount > 0) {
+            setIsInitialLoading(true)
+            toast('Loading satellite images...', { icon: '🛰️' })
+            
+            const firstDate = resultsData[0].date
+            await loadImageForDate(firstDate, true) // Load first image and show on map
+            
+            // Start loading other images in parallel asynchronously
+            await loadRemainingImagesAsync(resultsData.map((point: any) => point.date).slice(1))
+          }
         } else {
           toast.success('Analysis completed - but no data found for this period')
         }
@@ -161,80 +307,59 @@ export function NDVIAnalysis() {
     }
   })
 
-  // NDVI images mutation (simplified - gets all images at once)
-  const ndviImagesMutation = useMutation({
-    mutationFn: async (params: any) => {
-      return await apiClient.getNDVIImages(params)
-    },
-    onSuccess: (data: any) => {
-      const dates = data.images.map((img: any) => img.date).sort()
-      const imageMap = new Map<string, string>()
-      
-      // Convert base64 to data URLs and cache all images
-      data.images.forEach((img: any) => {
-        const dataUrl = `data:image/png;base64,${img.image}`
-        imageMap.set(img.date, dataUrl)
-      })
-      
-      setImageCache(imageMap)
-      
-      if (dates.length > 0) {
-        setCurrentSliderDate(dates[0])
-        setCurrentImageUrl(imageMap.get(dates[0]) || '')
-        setShowTimeSlider(true)
-        
-        // Create simplified metadata structure for slider
-        setImageMetadata({
-          available_dates: dates,
-          token: 'simplified', // Not needed anymore
-          polygon_hash: 'simplified', // Not needed anymore
-          statistics_per_date: {}
-        })
-      }
-      setIsLoadingImage(false)
-    },
-    onError: (error: any) => {
-      setIsLoadingImage(false)
-      toast.error('Failed to load NDVI images: ' + (error.message || 'Unknown error'))
-    }
-  })
 
   // Helper functions for time slider
 
-  const handleSliderDateChange = useCallback((date: string) => {
+  const handleSliderDateChange = useCallback(async (date: string) => {
     setCurrentSliderDate(date)
-    
-    // All images are pre-loaded, just switch to the cached image
+
+    setIsChangingImage(true)
+
+    // Check if image is already cached
     if (imageCache.has(date)) {
       const imageUrl = imageCache.get(date)!
       setCurrentImageUrl(imageUrl)
-      
-      // Also show the image as an overlay on the map if we have a drawn polygon
-      if (drawnPolygon && imageUrl.startsWith('data:image')) {
-        // Calculate bounds from the drawn polygon
-        const coordinates = drawnPolygon.type === 'Polygon' 
-          ? drawnPolygon.coordinates[0] as number[][]
-          : (drawnPolygon.coordinates[0] as number[][][])[0] as number[][]
-        
-        const lats = coordinates.map((coord: number[]) => coord[1])
-        const lngs = coordinates.map((coord: number[]) => coord[0])
-        
-        const bounds: [[number, number], [number, number]] = [
-          [Math.min(...lats), Math.min(...lngs)],
-          [Math.max(...lats), Math.max(...lngs)]
-        ]
-        
-        setNDVIImageOverlay(imageUrl, bounds)
+
+      // Show the image as an overlay on the map if we have drawn polygons
+      if (drawnPolygons && drawnPolygons.length > 0 && imageUrl.startsWith('data:image')) {
+        // Calculate bounds for multiple polygons
+        const bounds = calculateMultiPolygonBounds(drawnPolygons)
+        if (bounds) {
+          //console.log('Setting NDVI overlay with bounds:', bounds)
+          // Add timestamp to URL to force update
+          const timestampedUrl = `${imageUrl}#${Date.now()}`
+          setNDVIImageOverlay(timestampedUrl, bounds)
+        }
       }
+      setIsChangingImage(false)
+    } else {
+      // Image not cached, load it on demand
+      console.log('Loading image on demand for date:', date)
+      
+      // Only show individual notifications if not during initial loading
+      if (!isInitialLoading) {
+        toast('Loading satellite image...', { icon: '📊' })
+      }
+      
+      const imageUrl = await loadImageForDate(date, true) // Load and show on map
+      
+      if (!isInitialLoading) {
+        if (imageUrl) {
+          toast.success('Satellite image loaded!')
+        } else {
+          toast.error('Failed to load satellite image')
+        }
+      }
+      setIsChangingImage(false)
     }
-  }, [imageCache, drawnPolygon, setNDVIImageOverlay])
+  }, [imageCache, drawnPolygons, setNDVIImageOverlay, loadImageForDate, isInitialLoading, calculateMultiPolygonBounds])
 
   const canAnalyzeFarmlands = useMemo(() => {
     return selectedDataset === 'farmland' && currentZoom >= 12 && currentBounds
   }, [selectedDataset, currentZoom, currentBounds])
 
   const handleAnalyzePolygon = () => {
-    if (!drawnPolygon) {
+    if (!drawnPolygons || drawnPolygons.length === 0) {
       toast.error('Please draw your farm area on the map first! Use the drawing tools on the map.')
       return
     }
@@ -245,21 +370,39 @@ export function NDVIAnalysis() {
     setFarmlandResults(null)
     setIsComparison(false)
     setAnalyzingType('polygon')
-    
+
+    // Clear existing image data
+    setImageMetadata(null)
+    setCurrentSliderDate('')
+    setCurrentImageUrl('')
+    setImageCache(new Map())
+    setShowTimeSlider(false)
+    setIsLoadingImage(false)
+
     // Clear soil overlay and farmland data when switching to NDVI analysis
     setSoilImageOverlay(null, null)
     setFarmlandGeoJSON(null)
-    
+
+    // Create geometry - MultiPolygon if multiple polygons, single polygon if one
+    let geometry: GeoJSONGeometry;
+    if (drawnPolygons.length === 1) {
+      geometry = drawnPolygons[0];
+    } else {
+      // Combine multiple polygons into a MultiPolygon
+      geometry = {
+        type: 'MultiPolygon',
+        coordinates: drawnPolygons.map(polygon => polygon.coordinates)
+      } as GeoJSONGeometry;
+    }
+
     const params = {
       from: selectedDateRange.from,
       to: selectedDateRange.to,
-      geometry: drawnPolygon
+      geometry,
+      source: dataSource
     }
     toast('Checking your crop health over time...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
-
-    // Also trigger image analysis for time slider
-    handleAnalyzeImages()
   }
 
   const handleAnalyzeFarmlands = () => {
@@ -274,65 +417,54 @@ export function NDVIAnalysis() {
     setFarmlandResults(null)
     setIsComparison(false)
     setAnalyzingType('farmland')
-    
+
     // Clear soil overlay and farmland data when switching to NDVI analysis
     setSoilImageOverlay(null, null)
     setFarmlandGeoJSON(null)
-    
+
     const params = {
       from: selectedDateRange.from,
       to: selectedDateRange.to,
       bbox: currentBounds,
-      isFarmlandAnalysis: true
+      isFarmlandAnalysis: true,
+      source: dataSource
     }
     toast('Analyzing crop health for all farmlands in view...', { icon: '⏳' })
     ndviAnalysisMutation.mutate(params)
   }
 
-  const handleAnalyzeImages = () => {
-    if (!drawnPolygon) {
-      toast.error('Please draw your farm area on the map first! Use the drawing tools on the map.')
-      return
-    }
-
-    // Clear existing image data
-    setImageMetadata(null)
-    setCurrentSliderDate('')
-    setCurrentImageUrl('')
-    setImageCache(new Map())
-    setShowTimeSlider(false)
-    setIsLoadingImage(false)
-    
-    const params = {
-      from: selectedDateRange.from,
-      to: selectedDateRange.to,
-      geometry: drawnPolygon
-    }
-    
-    toast('Loading NDVI images for time slider...', { icon: '📊' })
-    setIsLoadingImage(true)
-    ndviImagesMutation.mutate(params)
-  }
 
   const handleCompareYear = () => {
     if (!comparisonYear || !results) return
-    
+
     // For date ranges, try to match the same time period in the comparison year
     const fromDate = parseDate(selectedDateRange.from)
     const toDate = parseDate(selectedDateRange.to)
-    
+
     const comparisonFrom = `${comparisonYear}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`
     const comparisonTo = `${comparisonYear}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`
-    
+
     const currentYear = parseDate(selectedDateRange.from).getFullYear().toString()
-    
-    
+
+
     setAnalyzingType('polygon')
     toast(`Comparing ${currentYear} with ${comparisonYear}...`, { icon: '⏳' })
-    
+
     // Create a separate mutation for comparison
-    if (drawnPolygon) {
-      apiClient.getNDVIForPolygon({ from: comparisonFrom, to: comparisonTo, geometry: drawnPolygon })
+    if (drawnPolygons && drawnPolygons.length > 0) {
+      // Create geometry - MultiPolygon if multiple polygons, single polygon if one
+      let geometry: GeoJSONGeometry;
+      if (drawnPolygons.length === 1) {
+        geometry = drawnPolygons[0];
+      } else {
+        // Combine multiple polygons into a MultiPolygon
+        geometry = {
+          type: 'MultiPolygon',
+          coordinates: drawnPolygons.map(polygon => polygon.coordinates)
+        } as GeoJSONGeometry;
+      }
+
+      apiClient.getNDVIForPolygon({ from: comparisonFrom, to: comparisonTo, geometry, source: dataSource })
         .then(data => {
           const results = data.results || data
           if (results && results.length > 0) {
@@ -350,7 +482,7 @@ export function NDVIAnalysis() {
           toast.error(`Failed to load ${comparisonYear} data: ${error.message}`)
         })
     } else if (canAnalyzeFarmlands) {
-      apiClient.getNDVIForRegion('farmland', comparisonFrom, comparisonTo, currentBounds || undefined)
+      apiClient.getNDVIForRegion('farmland', comparisonFrom, comparisonTo, currentBounds || undefined, dataSource)
         .then(data => {
           const resultsData = data.results || data
           if (resultsData && resultsData.length > 0) {
@@ -390,10 +522,10 @@ export function NDVIAnalysis() {
 
     try {
       toast('Generating CSV file...', { icon: '⏳' })
-      
+
       // Simple CSV header - only current period data
       let csvContent = 'Date,NDVI Value,Health Status\n'
-      
+
       // Export only current period data
       results.forEach((point: any) => {
         if (point.mean !== undefined && point.mean !== null && !isNaN(point.mean)) {
@@ -401,7 +533,7 @@ export function NDVIAnalysis() {
           csvContent += `${new Date(point.date).toLocaleDateString()},${point.mean.toFixed(3)},${healthStatus}\n`
         }
       })
-      
+
       // Create and download the file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
@@ -413,7 +545,7 @@ export function NDVIAnalysis() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
+
       toast.success('CSV file exported successfully!')
     } catch (error) {
       toast.error('Failed to export CSV file')
@@ -428,21 +560,21 @@ export function NDVIAnalysis() {
 
     try {
       toast('Generating PDF report...', { icon: '⏳' })
-      
+
       const jsPDF = (await import('jspdf')).default
       const html2canvas = (await import('html2canvas')).default
-      
+
       const pdf = new jsPDF('p', 'mm', 'a4')
       const pageWidth = pdf.internal.pageSize.getWidth()
       const pageHeight = pdf.internal.pageSize.getHeight()
       let yPosition = 20
-      
+
       // Title
       pdf.setFontSize(18)
       pdf.setFont('helvetica', 'bold')
       pdf.text('FutureFarmNow NDVI Analysis Report', pageWidth / 2, yPosition, { align: 'center' })
       yPosition += 15
-      
+
       // Analysis details
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'normal')
@@ -454,13 +586,8 @@ export function NDVIAnalysis() {
       pdf.text(`Duration: ${totalDays} days`, 20, yPosition)
       yPosition += 8
       pdf.text(`Data Points: ${results.length} measurements`, 20, yPosition)
-      yPosition += 8
-      if (isComparison && comparisonResults) {
-        pdf.text(`Comparison Year: ${comparisonYear} (${comparisonResults.length} measurements)`, 20, yPosition)
-        yPosition += 8
-      }
-      yPosition += 7
-      
+      yPosition += 15
+
       // Chart
       const chartElement = document.getElementById('ndvi-chart-container')
       if (chartElement) {
@@ -472,47 +599,46 @@ export function NDVIAnalysis() {
         const chartImgData = chartCanvas.toDataURL('image/png')
         const chartWidth = pageWidth - 40
         const chartHeight = (chartCanvas.height * chartWidth) / chartCanvas.width
-        
+
         if (yPosition + chartHeight > pageHeight - 20) {
           pdf.addPage()
           yPosition = 20
         }
-        
+
         pdf.setFontSize(12)
         pdf.setFont('helvetica', 'bold')
         pdf.text('NDVI Time Series Chart:', 20, yPosition)
         yPosition += 10
-        
+
         pdf.addImage(chartImgData, 'PNG', 20, yPosition, chartWidth, chartHeight)
         yPosition += chartHeight + 15
       }
-      
+
       // Statistics
       if (yPosition > pageHeight - 60) {
         pdf.addPage()
         yPosition = 20
       }
-      
+
       pdf.setFontSize(14)
       pdf.setFont('helvetica', 'bold')
       pdf.text('Statistical Summary:', 20, yPosition)
       yPosition += 10
-      
+
       const validResults = results.filter((point: any) => point.mean !== undefined && point.mean !== null)
       const avgHealth = validResults.length > 0 ? (validResults.reduce((sum: number, point: any) => sum + point.mean, 0) / validResults.length).toFixed(3) : 'N/A'
       const minHealth = validResults.length > 0 ? Math.min(...validResults.map((point: any) => point.mean)).toFixed(3) : 'N/A'
       const maxHealth = validResults.length > 0 ? Math.max(...validResults.map((point: any) => point.mean)).toFixed(3) : 'N/A'
-      
+
       pdf.setFontSize(11)
       pdf.setFont('helvetica', 'normal')
-      
-      // Primary period statistics
-      const primaryPeriod = isComparison ? new Date(selectedDateRange.from).getFullYear().toString() : `${selectedDateRange.from} to ${selectedDateRange.to}`
+
+      // Analysis period statistics
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'bold')
-      pdf.text(`${primaryPeriod} Statistics:`, 25, yPosition)
+      pdf.text(`Analysis Period Statistics:`, 25, yPosition)
       yPosition += 8
-      
+
       pdf.setFontSize(11)
       pdf.setFont('helvetica', 'normal')
       const stats = [
@@ -521,146 +647,59 @@ export function NDVIAnalysis() {
         `Maximum NDVI: ${maxHealth}`,
         `Health Status: ${parseFloat(avgHealth) > 0.5 ? 'Excellent' : parseFloat(avgHealth) > 0.2 ? 'Good' : 'Poor'}`
       ]
-      
+
       stats.forEach(stat => {
         pdf.text(`• ${stat}`, 30, yPosition)
         yPosition += 7
       })
-      
-      // Comparison statistics if available
-      if (isComparison && comparisonResults && comparisonResults.length > 0) {
-        yPosition += 5
-        const compAvgHealth = (comparisonResults.reduce((sum: number, point: any) => sum + point.mean, 0) / comparisonResults.length).toFixed(3)
-        const compMinHealth = Math.min(...comparisonResults.map((point: any) => point.mean)).toFixed(3)
-        const compMaxHealth = Math.max(...comparisonResults.map((point: any) => point.mean)).toFixed(3)
-        
-        pdf.setFontSize(12)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text(`${comparisonYear} Comparison Statistics:`, 25, yPosition)
-        yPosition += 8
-        
-        pdf.setFontSize(11)
-        pdf.setFont('helvetica', 'normal')
-        const compStats = [
-          `Average NDVI: ${compAvgHealth}`,
-          `Minimum NDVI: ${compMinHealth}`,
-          `Maximum NDVI: ${compMaxHealth}`,
-          `Health Status: ${parseFloat(compAvgHealth) > 0.5 ? 'Excellent' : parseFloat(compAvgHealth) > 0.2 ? 'Good' : 'Poor'}`
-        ]
-        
-        compStats.forEach(stat => {
-          pdf.text(`• ${stat}`, 30, yPosition)
-          yPosition += 7
-        })
-        
-        // Comparison analysis
-        yPosition += 5
-        const avgDiff = (parseFloat(avgHealth) - parseFloat(compAvgHealth)).toFixed(3)
-        const improvementText = parseFloat(avgDiff) > 0 ? 'improved' : 'decreased'
-        pdf.setFontSize(12)
-        pdf.setFont('helvetica', 'bold')
-        pdf.text('Year-over-Year Analysis:', 25, yPosition)
-        yPosition += 8
-        
-        pdf.setFontSize(11)
-        pdf.setFont('helvetica', 'normal')
-        pdf.text(`• Average NDVI ${improvementText} by ${Math.abs(parseFloat(avgDiff)).toFixed(3)} (${(Math.abs(parseFloat(avgDiff)) / parseFloat(compAvgHealth) * 100).toFixed(1)}%)`, 30, yPosition)
-        yPosition += 7
-      }
-      
+
       // Data table
       yPosition += 10
       if (yPosition > pageHeight - 100) {
         pdf.addPage()
         yPosition = 20
       }
-      
+
       pdf.setFontSize(12)
       pdf.setFont('helvetica', 'bold')
       pdf.text('Detailed Measurements:', 20, yPosition)
       yPosition += 10
-      
+
       pdf.setFontSize(9)
       pdf.setFont('helvetica', 'normal')
-      
-      if (isComparison && comparisonResults) {
-        // Table header for comparison
-        pdf.text('Date', 25, yPosition)
-        pdf.text(`${new Date(selectedDateRange.from).getFullYear()}`, 75, yPosition)
-        pdf.text(`${comparisonYear}`, 110, yPosition)
-        pdf.text('Difference', 145, yPosition)
-        yPosition += 7
-        
-        // Create a merged dataset for comparison table
-        const mergedData = results.map((point: any) => {
-          // Match dates by month-day, not exact date (since years are different)
-          const pointDate = new Date(point.date)
-          const pointMonthDay = `${String(pointDate.getMonth() + 1).padStart(2, '0')}-${String(pointDate.getDate()).padStart(2, '0')}`
-          
-          const compPoint = comparisonResults.find((comp: any) => {
-            const compDate = new Date(comp.date)
-            const compMonthDay = `${String(compDate.getMonth() + 1).padStart(2, '0')}-${String(compDate.getDate()).padStart(2, '0')}`
-            return compMonthDay === pointMonthDay
-          })
-          
-          return {
-            date: point.date,
-            current: point.mean,
-            comparison: compPoint?.mean,
-            difference: compPoint ? (point.mean - compPoint.mean) : null
-          }
-        })
-        
-        mergedData.forEach((row: any) => {
+
+      // Always use simple table format (no comparison data)
+      // Table header for primary data only
+      pdf.text('Date', 25, yPosition)
+      pdf.text('NDVI Value', 80, yPosition)
+      pdf.text('Health Status', 130, yPosition)
+      yPosition += 7
+
+      // Table data - only primary results
+      results.forEach((point: any) => {
+        if (point.mean !== undefined && point.mean !== null && !isNaN(point.mean)) {
           if (yPosition > pageHeight - 20) {
             pdf.addPage()
             yPosition = 20
           }
-          
-          pdf.text(new Date(row.date).toLocaleDateString(), 25, yPosition)
-          pdf.text(row.current.toFixed(3), 75, yPosition)
-          pdf.text(row.comparison ? row.comparison.toFixed(3) : 'N/A', 110, yPosition)
-          if (row.difference !== null) {
-            const diffText = row.difference >= 0 ? `+${row.difference.toFixed(3)}` : row.difference.toFixed(3)
-            pdf.text(diffText, 145, yPosition)
-          } else {
-            pdf.text('N/A', 145, yPosition)
-          }
+
+          const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
+          pdf.text(new Date(point.date).toLocaleDateString(), 25, yPosition)
+          pdf.text(point.mean.toFixed(3), 80, yPosition)
+          pdf.text(healthStatus, 130, yPosition)
           yPosition += 6
-        })
-      } else {
-        // Table header for single period
-        pdf.text('Date', 25, yPosition)
-        pdf.text('NDVI Value', 80, yPosition)
-        pdf.text('Health Status', 130, yPosition)
-        yPosition += 7
-        
-        // Table data
-        results.forEach((point: any) => {
-          if (point.mean !== undefined && point.mean !== null && !isNaN(point.mean)) {
-            if (yPosition > pageHeight - 20) {
-              pdf.addPage()
-              yPosition = 20
-            }
-            
-            const healthStatus = point.mean > 0.5 ? 'Excellent' : point.mean > 0.2 ? 'Good' : 'Poor'
-            pdf.text(new Date(point.date).toLocaleDateString(), 25, yPosition)
-            pdf.text(point.mean.toFixed(3), 80, yPosition)
-            pdf.text(healthStatus, 130, yPosition)
-            yPosition += 6
-          }
-        })
-      }
-      
+        }
+      })
+
       // Footer
       pdf.setFontSize(8)
       pdf.setFont('helvetica', 'normal')
       pdf.text('Generated by FutureFarmNow - University of California, Riverside', pageWidth / 2, pageHeight - 10, { align: 'center' })
-      
+
       // Save
       const filename = `ndvi-analysis-${selectedDateRange.from}-to-${selectedDateRange.to}-${new Date().toISOString().split('T')[0]}.pdf`
       pdf.save(filename)
-      
+
       toast.success('PDF report exported successfully!')
     } catch (error) {
       toast.error('Failed to export PDF report')
@@ -688,6 +727,24 @@ export function NDVIAnalysis() {
         </div>
 
         <div className="space-y-4">
+          {/* Data Source Selection */}
+          <div className="flex items-baseline gap-4 w-full" data-tutorial="data-source-selector">
+            <label className="text-sm font-medium text-foreground w-20 shrink-0">
+              Source
+            </label>
+            <div className="flex-1">
+              <Select
+                value={dataSource}
+                onChange={(e) => setDataSource(e.target.value)}
+                className="w-full"
+                style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
+              >
+                <SelectOption value="ndvi">Sentinel-2</SelectOption>
+                <SelectOption value="landsat">Landsat 8/9</SelectOption>
+              </Select>
+            </div>
+          </div>
+
           <div className="flex items-baseline gap-4" data-tutorial="date-selector">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
               Start Date
@@ -701,7 +758,7 @@ export function NDVIAnalysis() {
               style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
             />
           </div>
-          
+
           <div className="flex items-baseline gap-4">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
               End Date
@@ -741,7 +798,7 @@ export function NDVIAnalysis() {
         <div>
           <Button
             onClick={handleAnalyzePolygon}
-            disabled={!drawnPolygon || analyzingType === 'farmland'}
+            disabled={!drawnPolygons || drawnPolygons.length === 0 || analyzingType === 'farmland'}
             className={`w-full transition-opacity ${analyzingType === 'farmland' ? 'opacity-50' : ''}`}
           >
             {analyzingType === 'polygon' ? (
@@ -779,7 +836,7 @@ export function NDVIAnalysis() {
 
 
         {/* Warning Messages */}
-        {!drawnPolygon && !canAnalyzeFarmlands && (
+        {(!drawnPolygons || drawnPolygons.length === 0) && !canAnalyzeFarmlands && (
           <div className="mt-2 flex items-start space-x-2 text-amber-600 dark:text-amber-400 text-sm">
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p>Draw a polygon on the map to enable analysis or zoom in further to check all farmlands</p>
@@ -834,29 +891,61 @@ export function NDVIAnalysis() {
             </div>
           </div>
 
-          <div className="bg-muted/30 p-4 rounded-lg border">
-            <div className="mb-3 text-sm text-muted-foreground">
-              {comparisonResults ? 'Two charts for easy comparison - current period (green) and comparison year (blue):' : 'Green line shows how healthy your crops were on each date:'}
+          {/* NDVI Color Legend for Polygon Analysis */}
+          <NDVILegend
+            min={Math.min(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))}
+            max={Math.max(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))}
+          />
+
+          <div className="bg-card border rounded-lg">
+            <div className="p-3 border-b">
+              <h4 className="text-sm font-medium text-foreground">NDVI Over Time</h4>
+              <div className="text-xs text-muted-foreground mt-1">
+                {comparisonResults ? 'Comparison view - current period (green) vs selected year (blue)' : 'Track vegetation health changes over your selected time period'}
+                {showTimeSlider && !isComparison && (
+                  <span className="block mt-1">Click any point to view the satellite image for that date</span>
+                )}
+              </div>
             </div>
-            <div id="ndvi-chart-container">
-              <TimeSeriesChart 
-                data={results} 
+            <div id="ndvi-chart-container" className="p-3">
+              <TimeSeriesChart
+                data={results}
                 comparisonData={comparisonResults}
                 showComparison={isComparison}
                 primaryLabel={isComparison ? new Date(selectedDateRange.from).getFullYear().toString() : undefined}
                 comparisonLabel={isComparison ? comparisonYear : undefined}
+                onDateClick={handleSliderDateChange}
+                selectedDate={currentSliderDate}
+                showNavigation={showTimeSlider && !isComparison}
+                availableDates={imageMetadata?.available_dates}
+                enableAutoPlay={showTimeSlider && !isComparison}
+                onNavigate={(direction) => {
+                  const currentIdx = imageMetadata?.available_dates?.indexOf(currentSliderDate) ?? -1
+                  if (currentIdx !== -1 && imageMetadata?.available_dates) {
+                    const totalDates = imageMetadata.available_dates.length
+                    if (direction === 'prev') {
+                      // If at first, go to last; otherwise go to previous
+                      const newIdx = currentIdx === 0 ? totalDates - 1 : currentIdx - 1
+                      handleSliderDateChange(imageMetadata.available_dates[newIdx])
+                    } else if (direction === 'next') {
+                      // If at last, go to first; otherwise go to next
+                      const newIdx = currentIdx === totalDates - 1 ? 0 : currentIdx + 1
+                      handleSliderDateChange(imageMetadata.available_dates[newIdx])
+                    }
+                  }
+                }}
               />
             </div>
           </div>
 
           {/* NDVI Farmland Color Legend - Show when farmland analysis results are available */}
           {farmlandResults && farmlandResults.length > 0 && (
-            <NDVILegend 
+            <NDVILegend
               min={Math.min(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null))}
               max={Math.max(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null))}
             />
           )}
-          
+
           <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400 space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -927,7 +1016,7 @@ export function NDVIAnalysis() {
                 <dd className="text-lg font-semibold text-foreground">
                   {(() => {
                     const validPoints = results.filter((point: any) => point.mean !== undefined && point.mean !== null)
-                    return validPoints.length > 0 
+                    return validPoints.length > 0
                       ? (validPoints.reduce((sum: number, point: any) => sum + point.mean, 0) / validPoints.length).toFixed(2)
                       : 'N/A'
                   })()}
@@ -940,7 +1029,7 @@ export function NDVIAnalysis() {
                 <dd className="text-lg font-semibold text-foreground">
                   {(() => {
                     const validPoints = results.filter((point: any) => point.mean !== undefined && point.mean !== null)
-                    return validPoints.length > 0 
+                    return validPoints.length > 0
                       ? Math.min(...validPoints.map((point: any) => point.mean)).toFixed(2)
                       : 'N/A'
                   })()}
@@ -953,7 +1042,7 @@ export function NDVIAnalysis() {
                 <dd className="text-lg font-semibold text-foreground">
                   {(() => {
                     const validPoints = results.filter((point: any) => point.mean !== undefined && point.mean !== null)
-                    return validPoints.length > 0 
+                    return validPoints.length > 0
                       ? Math.max(...validPoints.map((point: any) => point.mean)).toFixed(2)
                       : 'N/A'
                   })()}
@@ -1042,23 +1131,6 @@ export function NDVIAnalysis() {
             </div>
           </div>
 
-          {/* NDVI Time Slider */}
-          {showTimeSlider && imageMetadata && (
-            <div className="space-y-4">
-              <h4 className="font-medium text-foreground flex items-center">
-                <Calendar className="h-5 w-5 mr-2 text-green-600" />
-                NDVI Image Time Series
-              </h4>
-              <NDVITimeSlider
-                availableDates={imageMetadata.available_dates || []}
-                currentDate={currentSliderDate}
-                onDateChange={handleSliderDateChange}
-                imageDataUrl={imageCache.get(currentSliderDate)}
-                isLoading={isLoadingImage}
-                statistics={imageMetadata.statistics_per_date}
-              />
-            </div>
-          )}
         </div>
       )}
 

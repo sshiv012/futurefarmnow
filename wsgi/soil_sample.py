@@ -51,7 +51,7 @@ import os
 import sys
 import tempfile
 from io import StringIO
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from shapely.geometry import shape
 from extract_points import *
 from choose_points import *
@@ -146,11 +146,24 @@ def process_request(query_params, query_geometry):
         }
     }
 
-    return jsonify(response_data)
+    response = make_response(jsonify(response_data))
+    # Add CORS headers
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
 # Define the main endpoint
-@soil_sample_bp.route('/soil/sample.json', methods=['POST', 'GET'])
+@soil_sample_bp.route('/soil/sample.json', methods=['POST', 'GET', 'OPTIONS'])
 def soil_sample():
+    # Handle preflight OPTIONS request for CORS
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     # Extract query parameters from the URL
     query_params = request.args  # Automatically handles QUERY_STRING
     try:
@@ -167,12 +180,22 @@ def soil_sample():
     except (ValueError, json.JSONDecodeError) as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
+        response = make_response(jsonify({
             "error": "Invalid JSON payload.",
             "details": str(e),
             "stack_trace": traceback.format_exc()
-        }), 400
+        }), 400)
+        # Add CORS headers to error response
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        response = make_response(jsonify({"error": str(e)}), 500)
+        # Add CORS headers to error response
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response

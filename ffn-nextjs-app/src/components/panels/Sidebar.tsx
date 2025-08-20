@@ -24,7 +24,7 @@ interface SidebarProps {
 export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial }: SidebarProps) {
   const { activeTab, setActiveTab, drawnPolygon } = useMapStore()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
 
   return (
     <div className={cn(
@@ -44,7 +44,31 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
           )}
         </div>
         <div className="flex items-center space-x-1" data-tutorial="sidebar-controls">
-          {!isCollapsed && <ThemeToggle />}
+          {!isCollapsed && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onShowHelp}
+                title="Help"
+                data-tutorial="help-button"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onStartTutorial}
+                title="Start Tutorial"
+                className="bg-gradient-to-r from-blue-500/10 to-green-500/10 hover:from-blue-500/20 hover:to-green-500/20"
+              >
+                <BookOpen className="h-4 w-4" />
+              </Button>
+              
+              <ThemeToggle />
+            </>
+          )}
 
           {/* Desktop expand toggle */}
           {!isCollapsed && (
@@ -93,11 +117,11 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
         </div>
       </div>
 
-      {/* Area Status and Controls - Below Logo */}
+      {/* Area Status and Clear Analysis - Combined */}
       {!isCollapsed && (
-        <div className="px-4 pb-4 space-y-3 border-b">
-          {/* Area Status */}
-          <div className="flex items-center justify-center">
+        <div className="px-4 py-3 border-b">
+          <div className="flex items-center justify-between">
+            {/* Area Status */}
             {drawnPolygon ? (
               <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
                 <MapPin className="h-4 w-4" />
@@ -109,42 +133,18 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
                 <span className="text-sm font-medium">No area selected</span>
               </div>
             )}
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onShowHelp}
-              className="flex-1 text-sm"
-              data-tutorial="help-button"
-            >
-              <HelpCircle className="h-4 w-4 mr-2" />
-              Help
-            </Button>
-
+            {/* Clear Analysis Button */}
             <Button
               variant="outline"
               size="sm"
               onClick={onClearAnalysis}
-              className="w-full text-sm"
+              className="text-sm"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Clear Analysis
             </Button>
           </div>
-
-          {/* Tutorial Button */}
-          <Button
-            variant="default"
-            size="sm"
-            onClick={onStartTutorial}
-            className="w-full text-sm bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600"
-          >
-            <BookOpen className="h-4 w-4 mr-2" />
-            Start Tutorial
-          </Button>
         </div>
       )}
 
@@ -184,30 +184,27 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
           >
             📊
           </Button>
-          {/* Sample Points feature temporarily disabled */}
-          {false && (
-            <Button
-              variant={activeTab === 'sample' ? 'default' : 'ghost'}
-              size="icon"
-              onClick={() => setActiveTab('sample')}
-              title="Sample Points"
-            >
-              📍
-            </Button>
-          )}
+          <Button
+            variant={activeTab === 'sample' ? 'default' : 'ghost'}
+            size="icon"
+            onClick={() => setActiveTab('sample')}
+            title="Sample Points"
+          >
+            📍
+          </Button>
         </div>
       ) : (
         <>
           {/* Dataset Selection */}
-          <div className="p-4 border-b bg-muted/50" data-tutorial="dataset-selector">
+          <div className="px-4 py-3 border-b bg-muted/50" data-tutorial="dataset-selector">
             <DatasetSelector />
           </div>
 
           {/* Analysis Tabs */}
           <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="p-4 border-b" data-tutorial="analysis-tabs">
+            <div className="px-4 py-3 border-b" data-tutorial="analysis-tabs">
               <Tabs className="w-full">
-                <TabsList className="grid grid-cols-2 w-full">
+                <TabsList className="grid grid-cols-3 w-full">
                   <TabsTrigger
                     value="soil"
                     active={activeTab === 'soil'}
@@ -222,16 +219,13 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
                   >
                     📊 NDVI
                   </TabsTrigger>
-                  {/* Sample Points feature temporarily disabled */}
-                  {false && (
-                    <TabsTrigger
-                      value="sample"
-                      active={activeTab === 'sample'}
-                      onClick={() => setActiveTab('sample')}
-                    >
-                      📍 Sample
-                    </TabsTrigger>
-                  )}
+                  <TabsTrigger
+                    value="sample"
+                    active={activeTab === 'sample'}
+                    onClick={() => setActiveTab('sample')}
+                  >
+                    📍 Sample
+                  </TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>

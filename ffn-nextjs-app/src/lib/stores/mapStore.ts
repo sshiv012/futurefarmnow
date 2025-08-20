@@ -16,6 +16,7 @@ interface MapState {
   farmlandGeoJSON: any | null
   ndviImageUrl: string | null
   ndviImageBounds: [[number, number], [number, number]] | null
+  samplePoints: Array<{id: number, x: number, y: number}> | null
   selectedSoilLayer: SoilLayerEnum
   selectedSoilDepth: string
   selectedDateRange: {
@@ -41,6 +42,7 @@ interface MapState {
   setSoilImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
   setFarmlandGeoJSON: (geoJSON: any | null) => void
   setNDVIImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
+  setSamplePoints: (points: Array<{id: number, x: number, y: number}> | null) => void
   clearArea: () => void
   clearAllAnalysis: () => void
   clearNDVICache: () => void
@@ -66,6 +68,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   farmlandGeoJSON: null,
   ndviImageUrl: null,
   ndviImageBounds: null,
+  samplePoints: null,
   selectedSoilLayer: 'ph',
   selectedSoilDepth: '0-5',
   selectedDateRange: {
@@ -91,12 +94,13 @@ export const useMapStore = create<MapState>((set, get) => ({
   setSoilImageOverlay: (url, bounds) => set({ soilImageUrl: url, soilImageBounds: bounds }),
   setFarmlandGeoJSON: (geoJSON) => set({ farmlandGeoJSON: geoJSON }),
   setNDVIImageOverlay: (url, bounds) => set({ ndviImageUrl: url, ndviImageBounds: bounds }),
+  setSamplePoints: (points) => set({ samplePoints: points }),
   clearArea: () => {
     const { drawnItems } = get()
     if (drawnItems) {
       drawnItems.clearLayers()
     }
-    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null, ndviImageUrl: null, ndviImageBounds: null })
+    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null, ndviImageUrl: null, ndviImageBounds: null, samplePoints: null })
   },
   clearAllAnalysis: () => {
     const { drawnItems, clearTrigger } = get()
@@ -111,6 +115,7 @@ export const useMapStore = create<MapState>((set, get) => ({
       farmlandGeoJSON: null,
       ndviImageUrl: null,
       ndviImageBounds: null,
+      samplePoints: null,
       isAnalyzing: false,
       clearTrigger: clearTrigger + 1
     })

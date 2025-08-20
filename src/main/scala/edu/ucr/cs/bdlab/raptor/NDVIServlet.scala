@@ -40,25 +40,74 @@ class NDVIServlet extends AbstractWebHandler with Logging {
 
   /** The path at which this server keeps all datasets */
   var ndviDataPath: Path = _
+  
+  /** The path at which this server keeps Landsat datasets */
+  var landsatDataPath: Path = _
+  
+  /** Base data path */
+  var baseDataPath: Path = _
 
   override def setup(ss: SparkSession, opts: BeastOptions): Unit = {
     super.setup(ss, opts)
     this.opts = opts
     this.sparkSession = ss
     val dataPath: String = opts.getString("datapath", "data")
+    baseDataPath = new Path(dataPath)
     ndviDataPath = new Path(dataPath, "NDVI")
+    landsatDataPath = new Path(dataPath, "LANDSAT")
 
-    // Build indexes if not existent
+    // Build indexes if not existent for both NDVI and Landsat data
     val sc = ss.sparkContext
-    val fs = ndviDataPath.getFileSystem(sc.hadoopConfiguration)
-    val directories = fs.listStatus(ndviDataPath,
-      (path: Path) => path.getName.matches("\\d+-\\d+-\\d+"))
-    for (dir <- directories) {
-      val indexPath = new Path(dir.getPath, "_index.csv")
-      if (!fs.exists(indexPath)) {
-        logInfo(s"Building a raster index for '${dir.getPath}'")
-        RasterFileRDD.buildIndex(sc, dir.getPath.toString, indexPath.toString)
+    val fs = baseDataPath.getFileSystem(sc.hadoopConfiguration)
+    
+    // Build indexes for NDVI data
+    if (fs.exists(ndviDataPath)) {
+      val ndviDirectories = fs.listStatus(ndviDataPath,
+        (path: Path) => path.getName.matches("\\d+-\\d+-\\d+"))
+      for (dir <- ndviDirectories) {
+        val indexPath = new Path(dir.getPath, "_index.csv")
+        if (!fs.exists(indexPath)) {
+          try {
+            logInfo(s"Building a raster index for NDVI '${dir.getPath}'")
+            RasterFileRDD.buildIndex(sc, dir.getPath.toString, indexPath.toString)
+          } catch {
+            case e: Exception =>
+              logError(s"Failed to build index for NDVI directory '${dir.getPath}': ${e.getMessage}")
+              logError("This may be due to permission issues or missing data. NDVI analysis will be unavailable for this directory.")
+          }
+        }
       }
+    }
+    
+    // Build indexes for Landsat data
+    if (fs.exists(landsatDataPath)) {
+      val landsatDirectories = fs.listStatus(landsatDataPath,
+        (path: Path) => path.getName.matches("\\d+-\\d+-\\d+"))
+      for (dir <- landsatDirectories) {
+        val indexPath = new Path(dir.getPath, "_index.csv")
+        if (!fs.exists(indexPath)) {
+          try {
+            logInfo(s"Building a raster index for Landsat '${dir.getPath}'")
+            RasterFileRDD.buildIndex(sc, dir.getPath.toString, indexPath.toString)
+          } catch {
+            case e: Exception =>
+              logError(s"Failed to build index for Landsat directory '${dir.getPath}': ${e.getMessage}")
+              logError("This may be due to permission issues or missing data. Landsat analysis will be unavailable for this directory.")
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Get the data path based on the data source parameter
+   * @param dataSource The data source type ("landsat" or default "ndvi")
+   * @return The appropriate data path
+   */
+  private def getDataPath(dataSource: String): Path = {
+    dataSource.toLowerCase match {
+      case "landsat" => landsatDataPath
+      case _ => ndviDataPath // Default to NDVI
     }
   }
 
@@ -74,11 +123,13 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     // Date range
     var dateFrom = ""
     var dateTo = ""
+    var dataSource = ""
 
     // try getting parameters from url
     try {
       dateFrom = request.getParameter("from")
       dateTo = request.getParameter("to")
+      dataSource = Option(request.getParameter("source")).getOrElse("ndvi") // Default to NDVI
     } catch {
       case e: NullPointerException => throw new RuntimeException("Couldn't find the required parameters: from and to")
     }
@@ -87,9 +138,13 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     response.setContentType("application/json")
     response.setStatus(HttpServletResponse.SC_OK)
 
+    // Get the appropriate data path based on source parameter
+    val currentDataPath = getDataPath(dataSource)
+    logInfo(s"singlePolygon: Using data source: '$dataSource', data path: '$currentDataPath'")
+    
     // load raster data based on selected date range
-    val fileSystem = ndviDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
-    val matchingRasterDirs: Array[String] = fileSystem.listStatus(ndviDataPath,
+    val fileSystem = currentDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    val matchingRasterDirs: Array[String] = fileSystem.listStatus(currentDataPath,
       (path: Path) => NDVIServlet.dateRangeOverlap(dateFrom, dateTo, path.getName))
       .map(_.getPath.toString)
     logDebug(s"Query matched dirs: ${matchingRasterDirs.mkString(",")}")
@@ -130,7 +185,7 @@ class NDVIServlet extends AbstractWebHandler with Logging {
           val results = resultsIterator.toArray
           val date = new Path(matchingRasterDir).getName
           val totalPixels = results.length
-          val nonZeroPixels = results.filter(x => x._2 != 0)
+          val nonZeroPixels = results.filter(x => x._2 != 0 && x._2 != 255)
           
           if (nonZeroPixels.isEmpty) {
             // No valid pixels found for this date - log and skip
@@ -139,7 +194,7 @@ class NDVIServlet extends AbstractWebHandler with Logging {
             logInfo(s"  Total pixels: $totalPixels")
             null
           } else {
-            val scaledValues = nonZeroPixels.map(x => (x._2 - 1.0f) * (2.0f / 254) - 1)
+            val scaledValues = nonZeroPixels.map(x => x._2.toFloat * (2.0f / 254) - 1)
             
             // Log detailed info for zero NDVI cases
             if (scaledValues.forall(_ == 0.0f)) {
@@ -206,12 +261,14 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     val opts = new BeastOptions
     var dateFrom: String = null
     var dateTo: String = null
+    var dataSource: String = null
     var mbr: Envelope = null
     var searchGeom: Geometry = null
     try {
       // get sidebar select parameters
       dateFrom = request.getParameter("from")
       dateTo = request.getParameter("to")
+      dataSource = Option(request.getParameter("source")).getOrElse("ndvi") // Default to NDVI
       // get extents parameters
       val minx = request.getParameter("minx").toDouble
       val miny = request.getParameter("miny").toDouble
@@ -237,9 +294,12 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     reader.close()
     logInfo(s"Read ${farmlands.length} records in ${(System.nanoTime() - t1) *1E-9} seconds")
 
+    // Get the appropriate data path based on source parameter
+    val currentDataPath = getDataPath(dataSource)
+    
     // load raster data based on selected date range
-    val fileSystem = ndviDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
-    val matchingRasterDirs: Array[String] = fileSystem.listStatus(ndviDataPath,
+    val fileSystem = currentDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    val matchingRasterDirs: Array[String] = fileSystem.listStatus(currentDataPath,
         (path: Path) => NDVIServlet.dateRangeOverlap(dateFrom, dateTo, path.getName))
       .map(_.getPath.toString)
     
@@ -262,8 +322,8 @@ class NDVIServlet extends AbstractWebHandler with Logging {
           val rjResults = SingleMachineRaptorJoin.raptorJoin[Int](matchingFiles, geoms)
           val averages: Array[(Float, Int)] = Array.fill(geoms.length)((0.0f, 0))
           val ndvis: Iterator[(Long, Float)] = rjResults
-            .filter(x => x._2 != 0)
-            .map(x => (x._1, (x._2.toFloat - 1.0f) * (2.0f / 254) - 1)) 
+            .filter(x => x._2 != 0 && x._2 != 255)
+            .map(x => (x._1, x._2.toFloat * (2.0f / 254) - 1)) 
           for (ndvi <- ndvis) {
             val sumCount: (Float, Int) = averages(ndvi._1.toInt)
             averages(ndvi._1.toInt) = (sumCount._1 + ndvi._2, sumCount._2 + 1)
@@ -355,32 +415,37 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     out.flush()
     true
   }
-
+  
   /**
-   * Returns available NDVI dates and metadata for image visualization with time slider
+   * Returns a single NDVI image as PNG for a specific date
    * @param path
    * @param request
    * @param response
    * @return
    */
-  @WebMethod(url = "/ndvix/imagemeta.json", order = 2)
-  def imageMetadata(path: String, request: HttpServletRequest, response: HttpServletResponse): Boolean = {
+  @WebMethod(url = "/ndvi/image.png", order = 1)
+  def ndviImage(path: String, request: HttpServletRequest, response: HttpServletResponse): Boolean = {
     val t1 = System.nanoTime()
     
-    // Get date range parameters
-    var dateFrom = ""
-    var dateTo = ""
+    // Get single date parameter
+    var date = ""
+    var dataSource = ""
     
     try {
-      dateFrom = request.getParameter("from")
-      dateTo = request.getParameter("to")
+      date = request.getParameter("date")
+      dataSource = Option(request.getParameter("source")).getOrElse("ndvi") // Default to NDVI
     } catch {
-      case e: NullPointerException => throw new RuntimeException("Couldn't find the required parameters: from and to")
+      case e: NullPointerException => throw new RuntimeException("Couldn't find the required parameter: date")
     }
     
     // Set response headers
-    response.setContentType("application/json")
+    response.setContentType("image/png")
     response.setStatus(HttpServletResponse.SC_OK)
+    
+    // Set caching headers for browser caching
+    response.setHeader("Cache-Control", "public, max-age=86400") // Cache for 24 hours
+    response.setHeader("ETag", s"ndvi-$date-$dataSource") // ETag for conditional requests
+    response.setDateHeader("Expires", System.currentTimeMillis() + 86400000) // Expires in 24 hours
     
     // Parse GeoJSON polygon from request body
     val baos = new ByteArrayOutputStream
@@ -402,140 +467,27 @@ class NDVIServlet extends AbstractWebHandler with Logging {
         throw new RuntimeException(s"Error parsing query geometry ${new String(geoJSONData)}", e)
     }
     
-    // Generate secure token that encodes polygon geometry and timestamp
-    val token = NDVIServlet.generateSecureToken(geom, dateFrom, dateTo)
+    // Get the appropriate data path based on source parameter
+    val currentDataPath = getDataPath(dataSource)
     
-    // Find matching date directories
-    val fileSystem = ndviDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
-    val matchingRasterDirs: Array[String] = fileSystem.listStatus(ndviDataPath,
-      (path: Path) => NDVIServlet.dateRangeOverlap(dateFrom, dateTo, path.getName))
+    // Find data for the specific date
+    val fileSystem = currentDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+    val matchingRasterDirs: Array[String] = fileSystem.listStatus(currentDataPath,
+      (path: Path) => path.getName == date)
       .map(_.getPath.toString)
-      .sortBy(path => new Path(path).getName) // Sort by date
     
-    logInfo(s"Found ${matchingRasterDirs.length} matching NDVI directories for image metadata")
+    logInfo(s"Found ${matchingRasterDirs.length} matching ${dataSource.toUpperCase} directories for date $date")
     
-    // Build response JSON
-    val mapper = new ObjectMapper
-    val rootNode = mapper.createObjectNode()
-    
-    // Add token and metadata
-    rootNode.put("token", token)
-    rootNode.put("polygon_hash", NDVIServlet.generatePolygonHash(geom))
-    
-    // Add available dates array
-    val availableDatesArray = mapper.createArrayNode()
-    val statisticsPerDateNode = mapper.createObjectNode()
-    
-    for (matchingRasterDir <- matchingRasterDirs) {
-      val date = new Path(matchingRasterDir).getName
-      availableDatesArray.add(date)
-      
-      // Generate basic statistics for each date (quick preview)
-      try {
-        val matchingFiles = RasterFileRDD.selectFiles(fileSystem, matchingRasterDir, geom)
-        if (matchingFiles.nonEmpty) {
-          // Quick statistics calculation without full image generation
-          val resultsIterator = SingleMachineRaptorJoin.raptorJoin[Int](matchingFiles, Array(geom))
-          if (resultsIterator != null) {
-            // Convert Iterator to Array to avoid consumption issues
-            val results = resultsIterator.toArray
-            if (results.nonEmpty) {
-              val nonZeroPixels = results.filter(x => x._2 != 0)
-              val scaledValues = nonZeroPixels.map(x => (x._2.toFloat - 1.0f) * (2.0f / 254) - 1)
-              
-              if (scaledValues.nonEmpty) {
-                val statsNode = mapper.createObjectNode()
-                statsNode.put("min", scaledValues.min)
-                statsNode.put("max", scaledValues.max)
-                statsNode.put("mean", scaledValues.sum / scaledValues.length)
-                statsNode.put("pixels", scaledValues.length)
-                statisticsPerDateNode.set(date, statsNode)
-              }
-            }
-          }
-        }
-      } catch {
-        case e: Exception =>
-          logInfo(s"Failed to generate statistics for date $date: ${e.getMessage}")
-          // Continue with other dates even if one fails
-      }
+    if (matchingRasterDirs.isEmpty) {
+      logError(s"No data found for date $date")
+      response.sendError(HttpServletResponse.SC_NOT_FOUND, s"No data found for date $date")
+      return false
     }
     
-    rootNode.set("available_dates", availableDatesArray)
-    rootNode.set("statistics_per_date", statisticsPerDateNode)
-    
-    // Write response
-    val out = response.getWriter
-    val jsonString = mapper.writer.writeValueAsString(rootNode)
-    out.print(jsonString)
-    out.flush()
-    
-    logInfo(s"Image metadata generation took ${(System.nanoTime() - t1) * 1E-9} seconds")
-    true
-  }
-
-  /**
-   * Returns array of NDVI images as base64 for date range
-   * @param path
-   * @param request
-   * @param response
-   * @return
-   */
-  @WebMethod(url = "/ndvi/images.json", order = 3)
-  def ndviImages(path: String, request: HttpServletRequest, response: HttpServletResponse): Boolean = {
-    val t1 = System.nanoTime()
-    
-    // Get date range parameters
-    var dateFrom = ""
-    var dateTo = ""
-    
+    // Process the single matching date
+    val matchingRasterDir = matchingRasterDirs.head
     try {
-      dateFrom = request.getParameter("from")
-      dateTo = request.getParameter("to")
-    } catch {
-      case e: NullPointerException => throw new RuntimeException("Couldn't find the required parameters: from and to")
-    }
-    
-    // Set response headers
-    response.setContentType("application/json")
-    response.setStatus(HttpServletResponse.SC_OK)
-    
-    // Parse GeoJSON polygon from request body
-    val baos = new ByteArrayOutputStream
-    val input = request.getInputStream
-    IOUtils.copy(input, baos)
-    input.close()
-    baos.close()
-    val geoJSONData: Array[Byte] = baos.toByteArray
-    var geom: Geometry = null
-    
-    try {
-      val jsonParser = new JsonFactory().createParser(new ByteArrayInputStream(geoJSONData))
-      geom = GeoJSONFeatureReader.parseGeometry(jsonParser)
-      geom.setSRID(4326)
-      jsonParser.close()
-    } catch {
-      case e: Exception =>
-        logError(s"Error parsing GeoJSON geometry ${new String(geoJSONData)}", e)
-        throw new RuntimeException(s"Error parsing query geometry ${new String(geoJSONData)}", e)
-    }
-    
-    // Find NDVI data for the date range
-    val fileSystem = ndviDataPath.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
-    val matchingRasterDirs: Array[String] = fileSystem.listStatus(ndviDataPath,
-      (path: Path) => NDVIServlet.dateRangeOverlap(dateFrom, dateTo, path.getName))
-      .map(_.getPath.toString)
-      .sortBy(path => new Path(path).getName) // Sort by date
-    
-    logInfo(s"Found ${matchingRasterDirs.length} matching NDVI directories for date range $dateFrom to $dateTo")
-    
-    // Generate images for each date
-    val imageResults = ArrayBuffer[(String, String)]() // (date, base64Image)
-    
-    for (matchingRasterDir <- matchingRasterDirs) {
-      try {
-        val date = new Path(matchingRasterDir).getName
-        val matchingFiles = RasterFileRDD.selectFiles(fileSystem, matchingRasterDir, geom)
+      val matchingFiles = RasterFileRDD.selectFiles(fileSystem, matchingRasterDir, geom)
         
         if (matchingFiles.nonEmpty) {
           // Get pixel data using RaptorJoin
@@ -547,8 +499,8 @@ class NDVIServlet extends AbstractWebHandler with Logging {
             
             if (results.nonEmpty) {
               // Filter and scale NDVI values
-              val nonZeroPixels = results.filter(x => x._2 != 0)
-              val scaledValues = nonZeroPixels.map(x => (x._2.toFloat - 1.0f) * (2.0f / 254) - 1)
+              val nonZeroPixels = results.filter(x => x._2 != 0 && x._2 != 255)
+              val scaledValues = nonZeroPixels.map(x => x._2.toFloat * (2.0f / 254) - 1)
               
               if (scaledValues.nonEmpty) {
                 // Calculate optimal resolution based on polygon aspect ratio
@@ -557,17 +509,34 @@ class NDVIServlet extends AbstractWebHandler with Logging {
                 val heightDegrees = envelope.getHeight
                 val aspectRatio = widthDegrees / heightDegrees
                 
-                // Set target resolution for longest dimension
-                val maxResolution = 512
-                val (imageWidth, imageHeight) = if (aspectRatio >= 1.0) {
-                  // Width is longer - set width to maxResolution
-                  (maxResolution, (maxResolution / aspectRatio).toInt)
+                // Calculate image dimensions based on target ground resolution
+                // Landsat: 30m/pixel, Sentinel-2: 10m/pixel
+                // We want to standardize to 10m/pixel for both
+                val targetGroundResolution = 10.0 // meters per pixel
+                val sourceGroundResolution = if (dataSource.toLowerCase == "landsat") 30.0 else 10.0 // meters per pixel
+                
+                // Calculate the image dimensions based on geographic extent and target resolution
+                // Convert degrees to meters (approximate, assumes Web Mercator projection)
+                val imageMBR = Reprojector.reprojectEnvelope(envelope, 4326, 3857)
+                val widthMeters = imageMBR.getWidth
+                val heightMeters = imageMBR.getHeight
+                
+                // Calculate pixel dimensions for target resolution
+                val imageWidth = (widthMeters / targetGroundResolution).toInt
+                val imageHeight = (heightMeters / targetGroundResolution).toInt
+                
+                // Limit maximum dimensions for performance
+                val maxDimension = 2048
+                val (finalImageWidth, finalImageHeight) = if (imageWidth > maxDimension || imageHeight > maxDimension) {
+                  val scale = math.min(maxDimension.toDouble / imageWidth, maxDimension.toDouble / imageHeight)
+                  ((imageWidth * scale).toInt, (imageHeight * scale).toInt)
                 } else {
-                  // Height is longer - set height to maxResolution  
-                  ((maxResolution * aspectRatio).toInt, maxResolution)
+                  (imageWidth, imageHeight)
                 }
                 
-                logInfo(s"Image dimensions: ${imageWidth}x${imageHeight} (aspect ratio: ${aspectRatio})")
+                logInfo(s"Data source: $dataSource, Source resolution: ${sourceGroundResolution}m/pixel, Target resolution: ${targetGroundResolution}m/pixel")
+                logInfo(s"Geographic extent: ${widthMeters.toInt}m x ${heightMeters.toInt}m")
+                logInfo(s"Image dimensions: ${finalImageWidth}x${finalImageHeight}")
                 
                 // Get the pixel data using SingleMachineRaptorJoin with proper result structure
                 // We need to use a different approach to get spatial coordinates
@@ -586,17 +555,17 @@ class NDVIServlet extends AbstractWebHandler with Logging {
                   val pixels: Iterator[RaptorJoinResult[Int]] = new PixelIterator[Int](intersectionIterator, matchingFiles, "0")
                   
                   // Arrange the pixels in an image using proper coordinate transformation
-                  val sums = new Array[Float](imageWidth * imageHeight)
-                  val counts = new Array[Int](imageWidth * imageHeight)
-                  val imageMBR = Reprojector.reprojectEnvelope(geom.getEnvelopeInternal, 4326, 3857)
-                  val imageMetadata = RasterMetadata.create(imageMBR.getMinX, imageMBR.getMaxY, imageMBR.getMaxX, imageMBR.getMinY,
-                    3857, imageWidth, imageHeight, imageWidth, imageHeight)
+                  val sums = new Array[Float](finalImageWidth * finalImageHeight)
+                  val counts = new Array[Int](finalImageWidth * finalImageHeight)
+                  val geomMBR = Reprojector.reprojectEnvelope(geom.getEnvelopeInternal, 4326, 3857)
+                  val imageMetadata = RasterMetadata.create(geomMBR.getMinX, geomMBR.getMaxY, geomMBR.getMaxX, geomMBR.getMinY,
+                    3857, finalImageWidth, finalImageHeight, finalImageWidth, finalImageHeight)
 
                   val cachedTransformations: scala.collection.mutable.HashMap[RasterMetadata, MathTransform] =
                     scala.collection.mutable.HashMap.empty[RasterMetadata, MathTransform]
 
                   for (pixel <- pixels) {
-                    if (pixel.m != 0) { // Only process non-zero NDVI pixels
+                    if (pixel.m != 0 && pixel.m != 255) { // Only process valid NDVI pixels (exclude 0 and 255 noData)
                       val pixelMBR = Array[Double](pixel.x, pixel.y,
                         pixel.x + 1, pixel.y,
                         pixel.x + 1, pixel.y + 1,
@@ -610,13 +579,13 @@ class NDVIServlet extends AbstractWebHandler with Logging {
                       })
                       transformation.transform(pixelMBR, 0, pixelMBR, 0, 4)
                       val minX: Int = 0 max (pixelMBR(0).round min pixelMBR(2).round min pixelMBR(4).round min pixelMBR(6).round).toInt
-                      val maxX: Int = imageWidth min (pixelMBR(0).round max pixelMBR(2).round max pixelMBR(4).round max pixelMBR(6).round).toInt
+                      val maxX: Int = finalImageWidth min (pixelMBR(0).round max pixelMBR(2).round max pixelMBR(4).round max pixelMBR(6).round).toInt
                       val minY: Int = 0 max (pixelMBR(1).round min pixelMBR(3).round min pixelMBR(5).round min pixelMBR(7).round).toInt
-                      val maxY: Int = imageHeight min (pixelMBR(1).round max pixelMBR(3).round max pixelMBR(5).round max pixelMBR(7).round).toInt
+                      val maxY: Int = finalImageHeight min (pixelMBR(1).round max pixelMBR(3).round max pixelMBR(5).round max pixelMBR(7).round).toInt
                       for (y <- minY until maxY; x <- minX until maxX) {
-                        val offset = y * imageWidth + x
-                        // Scale NDVI value from [1, 255] to [-1, +1] for coloring
-                        val ndviValue = (pixel.m.toFloat - 1.0f) * (2.0f / 254) - 1
+                        val offset = y * finalImageWidth + x
+                        // Scale NDVI value from [0, 254] to [-1, +1] for coloring
+                        val ndviValue = pixel.m.toFloat * (2.0f / 254) - 1
                         sums(offset) += ndviValue
                         counts(offset) = counts(offset) + 1
                       }
@@ -625,10 +594,10 @@ class NDVIServlet extends AbstractWebHandler with Logging {
                   
                   // Convert the array of values to an image using NDVI coloring
                   val averages = counts.zip(sums).map(x => if(x._1 == 0) Float.NaN else x._2 / x._1)
-                  val targetImage = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB)
+                  val targetImage = new BufferedImage(finalImageWidth, finalImageHeight, BufferedImage.TYPE_INT_ARGB)
                   for (offset <- averages.indices; if counts(offset) > 0) {
-                    val x = offset % imageWidth
-                    val y = offset / imageWidth
+                    val x = offset % finalImageWidth
+                    val y = offset / finalImageWidth
                     val ndviValue = averages(offset)
                     if (!ndviValue.isNaN) {
                       val color = NDVIServlet.ndviToColor(ndviValue)
@@ -642,57 +611,43 @@ class NDVIServlet extends AbstractWebHandler with Logging {
                   // val scale: Int = ((ndviValue - minM) * 255 / (maxM - minM)).toInt
                   // val color = new Color(scale, scale, scale)
                   
-                  // Convert image to base64
-                  val imageBytes = new ByteArrayOutputStream()
-                  ImageIO.write(targetImage, "png", imageBytes)
-                  val base64Image = Base64.getEncoder.encodeToString(imageBytes.toByteArray)
-                  imageBytes.close()
-                  
-                  imageResults.append((date, base64Image))
-                  logInfo(s"Generated NDVI image for date $date with proper spatial mapping")
+                  // Write PNG image directly to response
+                  val out = response.getOutputStream
+                  ImageIO.write(targetImage, "png", out)
+                  out.close()
+                  logInfo(s"Image generation took ${(System.nanoTime() - t1)*1E-9} seconds")
+                  return true
                 } else {
-                  logInfo(s"No spatial intersections found for date $date")
+                  logError(s"No spatial intersections found for date $date")
+                  response.sendError(HttpServletResponse.SC_NOT_FOUND, s"No spatial intersections found for date $date")
+                  return false
                 }
+              } else {
+                logError(s"No valid NDVI values found for date $date")
+                response.sendError(HttpServletResponse.SC_NOT_FOUND, s"No valid NDVI values found for date $date")
+                return false
               }
+            } else {
+              logError(s"No pixel results found for date $date")
+              response.sendError(HttpServletResponse.SC_NOT_FOUND, s"No pixel results found for date $date")
+              return false
             }
+          } else {
+            logError(s"Failed to process raster data for date $date")
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, s"Failed to process raster data for date $date")
+            return false
           }
+        } else {
+          logError(s"No matching files found for date $date")
+          response.sendError(HttpServletResponse.SC_NOT_FOUND, s"No matching files found for date $date")
+          return false
         }
-      } catch {
-        case e: Exception =>
-          logError(s"Error generating NDVI image for date ${new Path(matchingRasterDir).getName}", e)
-          // Continue with other dates even if one fails
-      }
+    } catch {
+      case e: Exception =>
+        logError(s"Error generating NDVI image for date $date", e)
+        response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, s"Error generating NDVI image: ${e.getMessage}")
+        return false
     }
-    
-    // Build JSON response
-    val mapper = new ObjectMapper
-    val rootNode = mapper.createObjectNode()
-    rootNode.put("engine", "Beast")
-    
-    // Add query info
-    val queryNode = mapper.createObjectNode()
-    queryNode.put("from", dateFrom)
-    queryNode.put("to", dateTo)
-    rootNode.set("query", queryNode)
-    
-    // Add images array
-    val imagesArray = mapper.createArrayNode()
-    for ((date, base64Image) <- imageResults) {
-      val imageNode = mapper.createObjectNode()
-      imageNode.put("date", date)
-      imageNode.put("image", base64Image)
-      imagesArray.add(imageNode)
-    }
-    rootNode.set("images", imagesArray)
-    
-    // Write response
-    val out = response.getWriter
-    val jsonString = mapper.writer.writeValueAsString(rootNode)
-    out.print(jsonString)
-    out.flush()
-    
-    logInfo(s"NDVI images generation took ${(System.nanoTime() - t1) * 1E-9} seconds, generated ${imageResults.length} images")
-    true
   }
 }
 
@@ -740,24 +695,55 @@ object NDVIServlet {
   }
   
   /**
-   * Convert NDVI value to RGB color for visualization
-   * Uses red-yellow-green gradient based on vegetation health
+   * Convert NDVI value to RGB color for visualization using gray-red-orange-yellow-green scale
+   * NDVI values range from -1 (water/non-vegetation) to +1 (dense vegetation)
+   * Color breakpoints: (0, 0.07, 0.15, 0.23, 0.3, 0.37, 0.45, 0.51, 0.58, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1)
    */
   def ndviToColor(ndvi: Float): Color = {
-    val clampedNdvi = Math.max(-1.0f, Math.min(1.0f, ndvi))
+    val clampedNdvi = Math.max(0.0f, Math.min(1.0f, ndvi))
     
-    if (clampedNdvi < 0.2f) {
-      // Poor vegetation (0 to 0.2): Red to Orange gradient
-      val t = Math.max(0.0f, clampedNdvi) / 0.2f
-      new Color(255, (t * 100).toInt, 0)
-    } else if (clampedNdvi < 0.5f) {
-      // Moderate vegetation (0.2 to 0.5): Orange to Yellow gradient
-      val t = (clampedNdvi - 0.2f) / 0.3f
-      new Color(255, (100 + t * 155).toInt, 0)
-    } else {
-      // Good to excellent vegetation (0.5 to 1): Yellow to Green gradient
-      val t = (clampedNdvi - 0.5f) / 0.5f
-      new Color((255 - t * 255).toInt, 255, 0)
+    // Define color breakpoints and corresponding RGB values
+    val breakpoints = Array(0.0f, 0.07f, 0.15f, 0.23f, 0.3f, 0.37f, 0.45f, 0.51f, 0.58f, 0.65f, 0.7f, 0.75f, 0.8f, 0.85f, 0.9f, 0.95f, 1.0f)
+    val colors = Array(
+      new Color(128, 128, 128), // Gray (0.0)
+      new Color(165, 0, 38),    // Dark red (0.07)
+      new Color(215, 48, 39),   // Red (0.15)
+      new Color(244, 109, 67),  // Red-orange (0.23)
+      new Color(253, 174, 97),  // Orange (0.3)
+      new Color(254, 224, 139), // Orange-yellow (0.37)
+      new Color(255, 255, 191), // Light yellow (0.45)
+      new Color(217, 239, 139), // Yellow-green (0.51)
+      new Color(166, 217, 106), // Light green (0.58)
+      new Color(102, 189, 99),  // Green (0.65)
+      new Color(65, 171, 93),   // Medium green (0.7)
+      new Color(35, 139, 69),   // Dark green (0.75)
+      new Color(0, 109, 44),    // Very dark green (0.8)
+      new Color(0, 90, 50),     // Forest green (0.85)
+      new Color(0, 70, 35),     // Deep green (0.9)
+      new Color(0, 50, 25),     // Very deep green (0.95)
+      new Color(0, 40, 20)      // Darkest green (1.0)
+    )
+    
+    // Find the appropriate color segment
+    var i = 0
+    while (i < breakpoints.length - 1 && clampedNdvi > breakpoints(i + 1)) {
+      i += 1
     }
+    
+    // If exact match, return the color
+    if (i == breakpoints.length - 1 || clampedNdvi == breakpoints(i)) {
+      return colors(i)
+    }
+    
+    // Interpolate between two colors
+    val t = (clampedNdvi - breakpoints(i)) / (breakpoints(i + 1) - breakpoints(i))
+    val color1 = colors(i)
+    val color2 = colors(i + 1)
+    
+    val r = (color1.getRed * (1 - t) + color2.getRed * t).toInt
+    val g = (color1.getGreen * (1 - t) + color2.getGreen * t).toInt
+    val b = (color1.getBlue * (1 - t) + color2.getBlue * t).toInt
+    
+    new Color(r, g, b)
   }
 }

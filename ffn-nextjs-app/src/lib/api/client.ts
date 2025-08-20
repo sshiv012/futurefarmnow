@@ -3,6 +3,7 @@ import axios from 'axios'
 import {
   VectorDataResponse,
   GeoJSONFeatureCollection,
+  GeoJSONGeometry,
   SoilStatsResponse,
   SoilSampleResponse,
   NDVISinglePolygonResponse,
@@ -11,8 +12,6 @@ import {
   SoilAnalysisParams,
   NDVIAnalysisParams,
   SoilSampleParams,
-  NDVIImageParams,
-  NDVIImagesResponse,
   APIError
 } from '@/lib/types/api'
 
@@ -21,7 +20,7 @@ class APIClient {
 
   constructor() {
     const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://raptor.cs.ucr.edu/futurefarmnow-backend-0.3-RC1'
-    
+
     this.client = axios.create({
       baseURL,
       timeout: 30000,
@@ -130,17 +129,24 @@ class APIClient {
   }
 
   async getSoilSamplePoints(params: SoilSampleParams): Promise<SoilSampleResponse> {
-    const queryParams = new URLSearchParams({
-      soildepth: params.soildepth,
-      layer: params.layer.join(','),
-      num_points: params.num_points.toString()
+    // Build query parameters manually to handle multiple layer parameters correctly
+    const queryParts = [
+      `soildepth=${encodeURIComponent(params.soildepth)}`,
+      `num_points=${params.num_points.toString()}`
+    ]
+
+    // Add each layer as a separate parameter (e.g., "layer=alpha&layer=clay")
+    params.layer.forEach(layer => {
+      queryParts.push(`layer=${encodeURIComponent(layer)}`)
     })
 
+    const queryString = queryParts.join('&')
+
     const response: AxiosResponse<SoilSampleResponse> = await this.client.post(
-      `/soil/sample.json?${queryParams}`,
+      `/soil/sample.json?${queryString}`,
       JSON.stringify(params.geometry),
       {
-        headers: { 'Content-Type': 'text/plain' }
+        headers: { 'Content-Type': 'application/json' }
       }
     )
     return response.data
@@ -182,10 +188,11 @@ class APIClient {
     return response.data
   }
 
-  async getNDVIForPolygon(params: NDVIAnalysisParams): Promise<NDVISinglePolygonResponse> {
+  async getNDVIForPolygon(params: NDVIAnalysisParams & { source?: string }): Promise<NDVISinglePolygonResponse> {
     const queryParams = new URLSearchParams({
       from: params.from,
-      to: params.to
+      to: params.to,
+      ...(params.source && { source: params.source })
     })
 
     const response: AxiosResponse<NDVISinglePolygonResponse> = await this.client.post(
@@ -202,7 +209,8 @@ class APIClient {
     vectorId: string,
     from: string,
     to: string,
-    bbox?: BoundingBox
+    bbox?: BoundingBox,
+    source?: string
   ): Promise<NDVIMultiPolygonResponse> {
     const params = {
       from,
@@ -212,7 +220,8 @@ class APIClient {
         miny: bbox.miny.toString(),
         maxx: bbox.maxx.toString(),
         maxy: bbox.maxy.toString()
-      })
+      }),
+      ...(source && { source })
     }
 
     const response: AxiosResponse<NDVIMultiPolygonResponse> = await this.client.get(
@@ -223,24 +232,25 @@ class APIClient {
   }
 
   /**
-   * Get NDVI images as base64 for date range
+   * Get a single NDVI image as PNG for a specific date
    */
-  async getNDVIImages(params: NDVIImageParams): Promise<NDVIImagesResponse> {
+  async getNDVIImage(params: { date: string; geometry: GeoJSONGeometry; source?: string }): Promise<Blob> {
     const queryParams = new URLSearchParams({
-      from: params.from,
-      to: params.to
+      date: params.date,
+      ...(params.source && { source: params.source })
     })
 
-    const response: AxiosResponse<NDVIImagesResponse> = await this.client.post(
-      `/ndvi/images.json?${queryParams}`,
+    const response: AxiosResponse<Blob> = await this.client.post(
+      `/ndvi/image.png?${queryParams}`,
       JSON.stringify(params.geometry),
       {
-        headers: { 'Content-Type': 'text/plain' }
+        headers: { 'Content-Type': 'text/plain' },
+        responseType: 'blob'
       }
     )
     return response.data
   }
+
 }
 
 export const apiClient = new APIClient()
-export default apiClient

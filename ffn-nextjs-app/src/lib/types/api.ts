@@ -1,4 +1,4 @@
-export interface VectorInfo {
+interface VectorInfo {
   id: string
   title: string
   description: string
@@ -13,7 +13,7 @@ export interface GeoJSONGeometry {
   coordinates: number[] | number[][] | number[][][] | number[][][][]
 }
 
-export interface GeoJSONFeature {
+interface GeoJSONFeature {
   type: 'Feature'
   geometry: GeoJSONGeometry
   properties: Record<string, any>
@@ -29,7 +29,7 @@ export type SoilLayerEnum =
   | 'lambda' | 'n' | 'om' | 'ph' | 'sand'
   | 'silt' | 'theta_r' | 'theta_s'
 
-export interface Statistics {
+interface Statistics {
   min: number
   max: number
   sum: number
@@ -46,7 +46,7 @@ export interface SoilStatsResponse {
   results: Statistics
 }
 
-export interface SoilSamplePoint {
+interface SoilSamplePoint {
   x: number
   y: number
   id: number
@@ -64,7 +64,7 @@ export interface SoilSampleResponse {
 }
 
 // NDVI Types
-export interface NDVIDataPoint {
+interface NDVIDataPoint {
   date: string
   mean: number
 }
@@ -112,39 +112,6 @@ export interface SoilSampleParams {
   geometry: GeoJSONGeometry
 }
 
-export interface NDVIImageMetadata {
-  min: number
-  max: number
-  mean: number
-  pixels: number
-}
-
-export interface NDVIImageMetaResponse {
-  token: string
-  polygon_hash: string
-  available_dates: string[]
-  statistics_per_date: Record<string, NDVIImageMetadata>
-}
-
-export interface NDVIImageParams {
-  from: string
-  to: string
-  geometry: GeoJSONGeometry
-}
-
-export interface NDVIImageData {
-  date: string
-  image: string // base64 encoded image
-}
-
-export interface NDVIImagesResponse {
-  engine: string
-  query: {
-    from: string
-    to: string
-  }
-  images: NDVIImageData[]
-}
 
 export interface APIError {
   message: string
