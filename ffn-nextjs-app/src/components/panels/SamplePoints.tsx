@@ -115,9 +115,9 @@ export function SamplePoints() {
     if (!results) return
 
     const csvContent = [
-      'ID,Latitude,Longitude,X,Y',
+      'ID,Latitude,Longitude',
       ...results.results.map((point: any) =>
-        `${point.id},${point.y},${point.x},${point.x},${point.y}`
+        `${point.id},${point.y},${point.x}`
       )
     ].join('\n')
 
@@ -135,7 +135,7 @@ export function SamplePoints() {
   }
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6" data-tutorial="sample-panel">
       {/* Parameters Section */}
       <div className="space-y-4">
         <h3 className="font-medium text-foreground flex items-center">
@@ -156,6 +156,7 @@ export function SamplePoints() {
               value={numPoints.toString()}
               onChange={(e) => setNumPoints(parseInt(e.target.value))}
               className="text-base"
+              data-tutorial="sample-count-selector"
             >
               {SAMPLE_COUNTS.map(count => (
                 <SelectOption key={count} value={count.toString()}>
@@ -176,6 +177,7 @@ export function SamplePoints() {
               value={selectedSoilDepth}
               onChange={(e) => setSelectedSoilDepth(e.target.value)}
               className="text-base"
+              data-tutorial="sample-depth-selector"
             >
               {SOIL_DEPTHS.map(depth => (
                 <SelectOption key={depth.value} value={depth.value} title={depth.description}>
@@ -192,7 +194,7 @@ export function SamplePoints() {
             <label className="block text-sm font-medium text-foreground mb-2">
               What soil properties do you want to test? (check all that apply)
             </label>
-            <div className="space-y-3 max-h-40 overflow-y-auto border rounded-lg p-3 bg-muted/20">
+            <div className="space-y-3 max-h-40 overflow-y-auto border rounded-lg p-3 bg-muted/20" data-tutorial="sample-properties-selector">
               {SOIL_LAYERS.map(layer => (
                 <label key={layer.value} className="flex items-start space-x-3 cursor-pointer">
                   <input
@@ -221,6 +223,7 @@ export function SamplePoints() {
           onClick={handleAnalyze}
           disabled={!drawnPolygons || drawnPolygons.length === 0 || selectedLayers.length === 0 || samplePointsMutation.isPending}
           className="w-full"
+          data-tutorial="generate-samples-button"
         >
           {samplePointsMutation.isPending ? (
             <>
@@ -252,7 +255,7 @@ export function SamplePoints() {
 
       {/* Results Section */}
       {results && (
-        <div className="space-y-6">
+        <div className="space-y-6" data-tutorial="sample-results">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground flex items-center">
               <Target className="h-5 w-5 mr-2 text-green-600" />
@@ -263,6 +266,7 @@ export function SamplePoints() {
               size="sm"
               onClick={exportPoints}
               title="Download coordinates as CSV file for GPS device"
+              data-tutorial="export-gps-button"
             >
               <Download className="h-4 w-4 mr-1" />
               Download for GPS

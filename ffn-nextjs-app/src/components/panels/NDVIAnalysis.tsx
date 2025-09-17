@@ -51,10 +51,10 @@ export function NDVIAnalysis() {
   // Calculate MBR (Minimum Bounding Rectangle) for multiple polygons
   const calculateMultiPolygonBounds = useCallback((polygons: GeoJSONGeometry[]): [[number, number], [number, number]] | null => {
     if (!polygons || polygons.length === 0) return null
-    
+
     let minLat = Infinity, maxLat = -Infinity
     let minLng = Infinity, maxLng = -Infinity
-    
+
     polygons.forEach((polygon) => {
       if (polygon && polygon.coordinates && Array.isArray(polygon.coordinates) && polygon.coordinates[0]) {
         const coords = polygon.coordinates[0] as [number, number][] // First ring of polygon
@@ -68,7 +68,7 @@ export function NDVIAnalysis() {
         }
       }
     })
-    
+
     return [[minLat, minLng], [maxLat, maxLng]]
   }, [])
 
@@ -199,7 +199,7 @@ export function NDVIAnalysis() {
     // Load images in parallel and wait for completion
     const promises = dates.map(date => loadImageForDate(date, false)) // No map show for parallel loading
     await Promise.all(promises)
-    
+
     // All images loaded
     setIsInitialLoading(false)
     toast.success('All satellite images loaded!')
@@ -284,15 +284,15 @@ export function NDVIAnalysis() {
         const dataCount = Array.isArray(resultsData) ? resultsData.length : 0
         if (dataCount > 0) {
           toast.success(`Found crop health data for ${dataCount} time points!`)
-          
+
           // After getting time series data, load the first image for the first available date
           if (drawnPolygons && drawnPolygons.length > 0 && dataCount > 0) {
             setIsInitialLoading(true)
             toast('Loading satellite images...', { icon: '🛰️' })
-            
+
             const firstDate = resultsData[0].date
             await loadImageForDate(firstDate, true) // Load first image and show on map
-            
+
             // Start loading other images in parallel asynchronously
             await loadRemainingImagesAsync(resultsData.map((point: any) => point.date).slice(1))
           }
@@ -335,14 +335,14 @@ export function NDVIAnalysis() {
     } else {
       // Image not cached, load it on demand
       console.log('Loading image on demand for date:', date)
-      
+
       // Only show individual notifications if not during initial loading
       if (!isInitialLoading) {
         toast('Loading satellite image...', { icon: '📊' })
       }
-      
+
       const imageUrl = await loadImageForDate(date, true) // Load and show on map
-      
+
       if (!isInitialLoading) {
         if (imageUrl) {
           toast.success('Satellite image loaded!')
@@ -418,9 +418,18 @@ export function NDVIAnalysis() {
     setIsComparison(false)
     setAnalyzingType('farmland')
 
-    // Clear soil overlay and farmland data when switching to NDVI analysis
+    // Clear existing image data from polygon analysis
+    setImageMetadata(null)
+    setCurrentSliderDate('')
+    setCurrentImageUrl('')
+    setImageCache(new Map())
+    setShowTimeSlider(false)
+    setIsLoadingImage(false)
+
+    // Clear soil overlay, farmland data, and NDVI overlay when switching to farmland analysis
     setSoilImageOverlay(null, null)
     setFarmlandGeoJSON(null)
+    setNDVIImageOverlay(null, null)
 
     const params = {
       from: selectedDateRange.from,
@@ -739,7 +748,8 @@ export function NDVIAnalysis() {
                 className="w-full"
                 style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
               >
-                <SelectOption value="ndvi">Sentinel-2</SelectOption>
+                <SelectOption value="ndvi">Sentinel-2 (OLD)</SelectOption>
+                <SelectOption value="sentinel">Sentinel-2</SelectOption>
                 <SelectOption value="landsat">Landsat 8/9</SelectOption>
               </Select>
             </div>
@@ -891,10 +901,16 @@ export function NDVIAnalysis() {
             </div>
           </div>
 
-          {/* NDVI Color Legend for Polygon Analysis */}
+          {/* NDVI Color Legend - Show for both polygon and farmland analysis */}
           <NDVILegend
-            min={Math.min(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))}
-            max={Math.max(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))}
+            min={farmlandResults && farmlandResults.length > 0
+              ? Math.min(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null && !isNaN(v)))
+              : Math.min(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))
+            }
+            max={farmlandResults && farmlandResults.length > 0
+              ? Math.max(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null && !isNaN(v)))
+              : Math.max(...results.map((r: any) => r.mean).filter((v: any) => v != null && !isNaN(v)))
+            }
           />
 
           <div className="bg-card border rounded-lg">
@@ -914,12 +930,12 @@ export function NDVIAnalysis() {
                 showComparison={isComparison}
                 primaryLabel={isComparison ? new Date(selectedDateRange.from).getFullYear().toString() : undefined}
                 comparisonLabel={isComparison ? comparisonYear : undefined}
-                onDateClick={handleSliderDateChange}
-                selectedDate={currentSliderDate}
-                showNavigation={showTimeSlider && !isComparison}
-                availableDates={imageMetadata?.available_dates}
-                enableAutoPlay={showTimeSlider && !isComparison}
-                onNavigate={(direction) => {
+                onDateClick={farmlandResults && farmlandResults.length > 0 ? undefined : handleSliderDateChange}
+                selectedDate={farmlandResults && farmlandResults.length > 0 ? undefined : currentSliderDate}
+                showNavigation={showTimeSlider && !isComparison && (!farmlandResults || farmlandResults.length === 0)}
+                availableDates={farmlandResults && farmlandResults.length > 0 ? undefined : imageMetadata?.available_dates}
+                enableAutoPlay={showTimeSlider && !isComparison && (!farmlandResults || farmlandResults.length === 0)}
+                onNavigate={farmlandResults && farmlandResults.length > 0 ? undefined : (direction) => {
                   const currentIdx = imageMetadata?.available_dates?.indexOf(currentSliderDate) ?? -1
                   if (currentIdx !== -1 && imageMetadata?.available_dates) {
                     const totalDates = imageMetadata.available_dates.length
@@ -938,13 +954,6 @@ export function NDVIAnalysis() {
             </div>
           </div>
 
-          {/* NDVI Farmland Color Legend - Show when farmland analysis results are available */}
-          {farmlandResults && farmlandResults.length > 0 && (
-            <NDVILegend
-              min={Math.min(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null))}
-              max={Math.max(...farmlandResults.flatMap((f: any) => f.results?.map((r: any) => r.mean) || []).filter((v: any) => v != null))}
-            />
-          )}
 
           <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400 space-y-3">
             <div className="flex items-center justify-between">
@@ -1048,18 +1057,6 @@ export function NDVIAnalysis() {
                   })()}
                 </dd>
                 <div className="text-xs text-muted-foreground mt-1">Best day in the period</div>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border-l-4 border-green-400">
-              <div className="text-sm text-green-800 dark:text-green-200">
-                <strong>Reading your results:</strong>
-                <ul className="mt-1 space-y-1 list-disc list-inside">
-                  <li>Values above 0.5: Very healthy, lush green crops</li>
-                  <li>Values 0.2-0.5: Good crop health, normal growth</li>
-                  <li>Values below 0.2: May indicate stress, disease, or poor growth</li>
-                  <li>Negative values: Usually bare soil, water, or non-vegetated areas</li>
-                </ul>
               </div>
             </div>
           </div>

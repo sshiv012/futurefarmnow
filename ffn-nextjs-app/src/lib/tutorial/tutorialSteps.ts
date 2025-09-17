@@ -107,7 +107,7 @@ export const tutorialSteps: TutorialStep[] = [
   {
     id: 'analysis-tabs',
     title: 'Analysis Options 📊',
-    content: 'Choose what you want to analyze: Soil properties (pH, nutrients) or Crop health over time (NDVI) to monitor your farm\'s condition.',
+    content: 'Choose what you want to analyze: Soil properties (pH, nutrients), Crop health over time (NDVI), or get Smart GPS sampling locations for field testing.',
     targetSelector: '[data-tutorial="analysis-tabs"]',
     position: 'right',
     action: 'none',
@@ -191,6 +191,65 @@ export const tutorialSteps: TutorialStep[] = [
     title: 'NDVI Farmland View Analysis 🌾',
     content: 'Just like with soil analysis, if you zoom in close enough, you\'ll see "Analyze All Farmlands in View" button appear here for NDVI too! This lets you compare crop health across multiple farms in your area. Remember: zoom level 12 or higher to unlock this feature.',
     targetSelector: '[data-tutorial="ndvi-analysis-buttons"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'sample-analysis',
+    title: 'Smart Soil Sampling 📍',
+    content: 'Get GPS coordinates for the best spots to collect soil samples in your field. This uses scientific algorithms to find the most representative locations for accurate soil testing.',
+    targetSelector: '[data-tutorial="sample-panel"]',
+    position: 'right',
+    action: 'none',
+    waitForElement: true,
+    skipEnabled: true,
+    autoAction: {
+      type: 'switchTab',
+      value: 'sample'
+    }
+  },
+  {
+    id: 'sample-count-selector',
+    title: 'Number of Sampling Spots 🔢',
+    content: 'Choose how many soil sampling locations you need. More points give more accurate results, but require more work in the field. 5-7 points work well for most small farms.',
+    targetSelector: '[data-tutorial="sample-count-selector"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'sample-depth-selector',
+    title: 'Sampling Depth 📏',
+    content: 'Select how deep to collect your soil samples. Surface levels are good for seedlings, while deeper levels match the root zones of established crops.',
+    targetSelector: '[data-tutorial="sample-depth-selector"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'sample-properties-selector',
+    title: 'Soil Properties to Test 🧪',
+    content: 'Check which soil properties you want to test for. The system will optimize sampling locations based on the variability of these properties across your field.',
+    targetSelector: '[data-tutorial="sample-properties-selector"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'generate-samples-button',
+    title: 'Generate Smart Sampling Locations 🎯',
+    content: 'Click this button to generate optimal sampling locations. The system analyzes your field\'s soil variability to find the best spots for representative samples.',
+    targetSelector: '[data-tutorial="generate-samples-button"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'sample-results-gps',
+    title: 'GPS Coordinates & Field Navigation 🗺️',
+    content: 'Once generated, you\'ll see numbered circles on the map showing exact sampling locations. Download the GPS coordinates as a CSV file to load into your GPS device for easy field navigation.',
+    targetSelector: '[data-tutorial="export-gps-button"]',
     position: 'right',
     action: 'none',
     skipEnabled: true

@@ -60,11 +60,11 @@ export function NDVILegend({ min, max }: NDVILegendProps) {
         
         {/* Value labels */}
         <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-          <span>{min.toFixed(3)}</span>
+          <span>0.000</span>
           <span className="text-foreground font-medium">
             NDVI Values
           </span>
-          <span>{max.toFixed(3)}</span>
+          <span>1.000</span>
         </div>
       </div>
       
