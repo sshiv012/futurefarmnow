@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet-draw'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useTheme } from '@/lib/contexts/ThemeContext'
 import { toast } from '@/lib/utils/toast'
 import { valueToGrayscale, ndviToColor } from '@/lib/utils/color'
+import { createSafePopupContent, formatNumber } from '@/lib/utils/sanitize'
 
 // Fix for default markers in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -16,7 +17,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 })
 
-export default function LeafletMap() {
+function LeafletMapComponent() {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const drawControlRef = useRef<L.Control.Draw | null>(null)
@@ -33,8 +34,7 @@ export default function LeafletMap() {
   const userMarkerTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const urlUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isMapMovingRef = useRef(false)
-  const lastStateUpdateRef = useRef<number>(0)
-  const stateUpdateThrottleRef = useRef<NodeJS.Timeout | null>(null)
+  const lastAppliedState = useRef<{ center?: [number, number], zoom?: number }>({})
 
   const {
     selectedDataset,
@@ -67,7 +67,7 @@ export default function LeafletMap() {
       imagePane.style.zIndex = '250'
       // console.log('Created imagePane with z-index 250')
     }
-    
+
     if (!map.getPane('vectorPane')) {
       const vectorPane = map.createPane('vectorPane')
       vectorPane.style.zIndex = '350'
@@ -201,12 +201,23 @@ export default function LeafletMap() {
       center: [36.7783, -119.4179], // California coordinates
       zoom: 6,
       minZoom: 3,
+      maxZoom: 19,
       zoomControl: true,
+      // Performance optimizations
+      preferCanvas: true, // Use canvas renderer for better performance
+      attributionControl: false, // We'll add our own attribution
     })
 
     const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
+      // Performance optimizations for tiles
+      keepBuffer: 4,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      zoomOffset: 0,
+      tileSize: 256,
+      crossOrigin: true,
     }).addTo(map)
 
     tileLayerRef.current = tileLayer
@@ -307,14 +318,10 @@ export default function LeafletMap() {
       toast.info('Drag the corners to adjust your area, then click Save to confirm.')
     })
 
-    const throttledStateUpdate = () => {
-      const now = Date.now()
-      if (now - lastStateUpdateRef.current < 300) {
-        return
-      }
-      
-      lastStateUpdateRef.current = now
-      
+    // Optimized state update function - only called on moveend/zoomend
+    const updateMapState = () => {
+      if (isUpdatingFromURL.current) return
+
       const bounds = map.getBounds()
       const center = map.getCenter()
       const zoom = map.getZoom()
@@ -326,54 +333,58 @@ export default function LeafletMap() {
         maxy: bounds.getNorth(),
       }
 
-      const currentZoomValue = useMapStore.getState().currentZoom
-      const currentCenterValue = useMapStore.getState().currentCenter
-      const currentBoundsValue = useMapStore.getState().currentBounds
+      // Round values to prevent micro-updates
+      const newCenter: [number, number] = [
+        Math.round(center.lat * 10000) / 10000,
+        Math.round(center.lng * 10000) / 10000
+      ]
+      const newZoom = Math.round(zoom * 10) / 10
 
-      const threshold = isMapMovingRef.current ? 0.001 : 0.0001
+      // Only update if meaningfully different
+      const needsUpdate = (
+        !lastAppliedState.current.center ||
+        Math.abs(lastAppliedState.current.center[0] - newCenter[0]) > 0.0001 ||
+        Math.abs(lastAppliedState.current.center[1] - newCenter[1]) > 0.0001 ||
+        Math.abs((lastAppliedState.current.zoom || 0) - newZoom) > 0.01
+      )
 
-      if (
-        zoom !== currentZoomValue ||
-        Math.abs(center.lat - (currentCenterValue?.[0] || 0)) > threshold ||
-        Math.abs(center.lng - (currentCenterValue?.[1] || 0)) > threshold ||
-        !currentBoundsValue ||
-        Math.abs(newBounds.minx - currentBoundsValue.minx) > threshold
-      ) {
+      if (needsUpdate) {
+        lastAppliedState.current = { center: newCenter, zoom: newZoom }
+        // Update state in one batch - this will trigger URL update
         setCurrentBounds(newBounds)
-        setCurrentZoom(zoom)
-        setCurrentCenter([center.lat, center.lng])
+        setCurrentZoom(newZoom)
+        setCurrentCenter(newCenter)
       }
     }
 
+    // Track map movement state
     map.on('movestart zoomstart', () => {
       isMapMovingRef.current = true
     })
 
-    map.on('moveend zoomend', () => {
-      if (isUpdatingFromURL.current) {
-        isMapMovingRef.current = false
-        return
-      }
-
+    // Only update state when movement ends (not during movement)
+    map.on('moveend', () => {
       isMapMovingRef.current = false
-      
-      if (stateUpdateThrottleRef.current) {
-        clearTimeout(stateUpdateThrottleRef.current)
-      }
-
-      stateUpdateThrottleRef.current = setTimeout(() => {
+      if (!isUpdatingFromURL.current) {
+        // Use requestIdleCallback for better performance
         if (window.requestIdleCallback) {
-          window.requestIdleCallback(() => throttledStateUpdate(), { timeout: 100 })
+          window.requestIdleCallback(() => updateMapState(), { timeout: 50 })
         } else {
-          throttledStateUpdate()
+          updateMapState()
         }
-      }, 100)
+      }
     })
 
-    map.on('move zoom', () => {
-      if (isUpdatingFromURL.current) return
-      
-      throttledStateUpdate()
+    map.on('zoomend', () => {
+      isMapMovingRef.current = false
+      if (!isUpdatingFromURL.current) {
+        // Use requestIdleCallback for better performance
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(() => updateMapState(), { timeout: 50 })
+        } else {
+          updateMapState()
+        }
+      }
     })
 
     mapInstanceRef.current = map
@@ -389,11 +400,6 @@ export default function LeafletMap() {
       if (urlUpdateTimeoutRef.current) {
         clearTimeout(urlUpdateTimeoutRef.current)
         urlUpdateTimeoutRef.current = null
-      }
-
-      if (stateUpdateThrottleRef.current) {
-        clearTimeout(stateUpdateThrottleRef.current)
-        stateUpdateThrottleRef.current = null
       }
 
       // Remove style element if it exists
@@ -450,37 +456,24 @@ export default function LeafletMap() {
     }
   }, [setCurrentBounds, setCurrentZoom, setCurrentCenter, setDrawnPolygon, addDrawnPolygon, setDrawnPolygons, setMapInstance, setDrawnItems])
 
+  // Handle initial URL state when map is ready
   useEffect(() => {
-    if (!mapInstanceRef.current) return
+    if (!mapInstanceRef.current || hasCheckedURLCoordinates.current) return
 
-    // Handle center and zoom updates separately
-    const mapCenter = mapInstanceRef.current.getCenter()
-    const mapZoom = mapInstanceRef.current.getZoom()
+    // Mark as checked
+    hasCheckedURLCoordinates.current = true
 
-    // Check what needs to be updated
-    const centerChanged = currentCenter && (Math.abs(mapCenter.lat - currentCenter[0]) > 0.00001 ||
-      Math.abs(mapCenter.lng - currentCenter[1]) > 0.00001)
-    const zoomChanged = currentZoom !== undefined && currentZoom !== null &&
-      Math.abs(mapZoom - currentZoom) > 0.1
-
-    if (centerChanged || zoomChanged) {
-      // Use URL values if available, otherwise keep current map values
-      const targetCenter = currentCenter || [mapCenter.lat, mapCenter.lng]
-      const targetZoom = currentZoom !== undefined && currentZoom !== null ? currentZoom : mapZoom
-
+    // Get initial state from URL via store (which was set by useURLSync on mount)
+    const state = useMapStore.getState()
+    if (state.currentCenter && state.currentZoom !== undefined && state.currentZoom !== null) {
       isUpdatingFromURL.current = true
-      mapInstanceRef.current.setView(targetCenter, targetZoom)
+      mapInstanceRef.current.setView(state.currentCenter, state.currentZoom)
 
-      // Clear any existing timeout
-      if (urlUpdateTimeoutRef.current) {
-        clearTimeout(urlUpdateTimeoutRef.current)
-      }
-
-      urlUpdateTimeoutRef.current = setTimeout(() => {
+      setTimeout(() => {
         isUpdatingFromURL.current = false
-      }, 100)
+      }, 200)
     }
-  }, [currentCenter, currentZoom])
+  }, []) // Empty dependency - run once on mount
 
   useEffect(() => {
     if (!mapInstanceRef.current || !tileLayerRef.current) return
@@ -493,27 +486,37 @@ export default function LeafletMap() {
       newTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
         attribution: '© OpenStreetMap contributors, © CartoDB',
         maxZoom: 19,
-        subdomains: 'abcd'
+        subdomains: 'abcd',
+        // Performance optimizations
+        keepBuffer: 4,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
+        crossOrigin: true,
       })
     } else {
       // Use standard OpenStreetMap for light theme
       newTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
+        // Performance optimizations
+        keepBuffer: 4,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
+        crossOrigin: true,
       })
     }
 
     // Add new layer first, then remove old one to prevent flicker
     const oldTileLayer = tileLayerRef.current
     newTileLayer.addTo(mapInstanceRef.current)
-    
+
     // Small delay to ensure new tiles start loading before removing old ones
     setTimeout(() => {
       if (mapInstanceRef.current && oldTileLayer) {
         mapInstanceRef.current.removeLayer(oldTileLayer)
       }
     }, 100)
-    
+
     tileLayerRef.current = newTileLayer
 
     // Re-add vector tile layer if one is selected (preserve data layers)
@@ -553,12 +556,17 @@ export default function LeafletMap() {
         minZoom: 1,
         opacity: 0.7,
         attribution: 'FutureFarmNow',
-        pane: 'vectorPane'
+        pane: 'vectorPane',
+        // Performance optimizations
+        keepBuffer: 2,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
+        crossOrigin: true,
       })
 
       vectorTileLayer.addTo(mapInstanceRef.current)
       vectorTileLayerRef.current = vectorTileLayer
-      
+
       // Vector tiles will automatically use vectorPane with z-index 350
 
       // Only show toast and center map if not initial load
@@ -634,7 +642,7 @@ export default function LeafletMap() {
 
       newOverlay.addTo(mapInstanceRef.current)
       soilImageOverlayRef.current = newOverlay
-      
+
       // Vector tiles will stay on top automatically via vectorPane
     }
 
@@ -674,7 +682,7 @@ export default function LeafletMap() {
 
       newOverlay.addTo(mapInstanceRef.current)
       ndviImageOverlayRef.current = newOverlay
-      
+
       // Vector tiles will stay on top automatically via vectorPane
     }
 
@@ -710,31 +718,44 @@ export default function LeafletMap() {
 
       // Check if we can reuse cached value map
       let farmlandValueMap = farmlandValueMapRef.current
-      
+
       // Only recreate value map if data has changed (check data presence and size)
       const hasNdviData = ndviData && Array.isArray(ndviData) && ndviData.length > 0
       const hasColorData = colorData && colorData.farmlands && colorData.farmlands.length > 0
-      const expectedMapSize = (hasNdviData ? ndviData.length * 2 : 0) + (hasColorData ? colorData.farmlands.length * 2 : 0)
-      
+      const expectedMapSize = (hasNdviData ? ndviData.length * 3 : 0) + (hasColorData ? colorData.farmlands.length * 2 : 0)
+
       if (!farmlandValueMap || farmlandValueMap.size !== expectedMapSize) {
         farmlandValueMap = new Map()
-        
-        // Process NDVI data if available
+
+        // Pre-compute NDVI averages for performance
         if (ndviData && Array.isArray(ndviData)) {
           ndviData.forEach((farmland: any) => {
             if (farmland.objectid && farmland.results) {
+              // Pre-calculate mean NDVI from time series
+              const validValues = farmland.results
+                .map((point: any) => point.mean)
+                .filter((val: any) => val !== undefined && val !== null && !isNaN(val))
+
+              let precomputedAverage = null
+              if (validValues.length > 0) {
+                precomputedAverage = validValues.reduce((sum: number, val: number) => sum + val, 0) / validValues.length
+              }
+
+              // Store precomputed average for instant lookup
+              farmlandValueMap!.set(`ndvi_avg_${farmland.objectid}`, precomputedAverage)
               // Store NDVI time series data
               farmlandValueMap!.set(`ndvi_${farmland.objectid}`, farmland.results)
               farmlandValueMap!.set(`stats_${farmland.objectid}`, {
                 ...farmland,
                 type: 'ndvi',
-                dataCount: farmland.results.length
+                dataCount: farmland.results.length,
+                precomputedAverage
               })
             }
           })
         }
-        
-        // Process soil color data if available  
+
+        // Process soil color data if available
         if (colorData && colorData.farmlands) {
           colorData.farmlands.forEach((farmland: any, index: number) => {
             // Try different ways to get the farmland ID - prioritize objectid since that's what we're seeing
@@ -766,7 +787,7 @@ export default function LeafletMap() {
             }
           })
         }
-        
+
         // Cache the value map for reuse
         farmlandValueMapRef.current = farmlandValueMap
       }
@@ -793,21 +814,14 @@ export default function LeafletMap() {
             let value
             let isNDVIData = false
 
-            // First try to find NDVI data
+            // First try to find pre-computed NDVI average (O(1) lookup)
             if (ndviData && Array.isArray(ndviData)) {
               for (const id of possibleFeatureIds) {
-                const ndviTimeSeries = farmlandValueMap!.get(`ndvi_${id}`)
-                if (ndviTimeSeries && Array.isArray(ndviTimeSeries)) {
-                  // Calculate mean NDVI from time series (optimized calculation)
-                  const validValues = ndviTimeSeries
-                    .map((point: any) => point.mean)
-                    .filter((val: any) => val !== undefined && val !== null && !isNaN(val))
-                  
-                  if (validValues.length > 0) {
-                    value = validValues.reduce((sum: number, val: number) => sum + val, 0) / validValues.length
-                    isNDVIData = true
-                    break
-                  }
+                const precomputedAvg = farmlandValueMap!.get(`ndvi_avg_${id}`)
+                if (precomputedAvg !== undefined && precomputedAvg !== null) {
+                  value = precomputedAvg
+                  isNDVIData = true
+                  break
                 }
               }
             }
@@ -873,21 +887,15 @@ export default function LeafletMap() {
                 }
               }
 
-              let popupContent = '<div style="min-width: 200px;">'
-
-              // Add farmland ID
-              if (matchedId) {
-                popupContent += `<h4 style="margin: 0 0 8px 0; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 4px;">Farmland ID: ${matchedId}</h4>`
-              }
+              const sections = []
 
               // Add statistics based on data type
               if (farmlandStats) {
                 if (farmlandStats.type === 'ndvi') {
                   // NDVI Time Series Display
-                  popupContent += '<div style="background: #f0f9ff; padding: 8px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #10b981;">'
-                  popupContent += '<strong style="color: #059669;">📊 NDVI Crop Health Time Series</strong><br>'
-                  popupContent += `<strong>Data Points:</strong> ${farmlandStats.dataCount} measurements<br>`
-                  
+                  const ndviItems = []
+                  ndviItems.push({ label: 'Data Points', value: `${farmlandStats.dataCount} measurements` })
+
                   // Get the actual time series data
                   const ndviTimeSeries = farmlandValueMap!.get(`ndvi_${matchedId}`)
                   if (ndviTimeSeries && Array.isArray(ndviTimeSeries)) {
@@ -895,60 +903,77 @@ export default function LeafletMap() {
                     const validValues = ndviTimeSeries
                       .map((point: any) => point.mean)
                       .filter((value: any) => value !== undefined && value !== null && !isNaN(value))
-                    
+
                     if (validValues.length > 0) {
                       const avg = validValues.reduce((sum: number, val: number) => sum + val, 0) / validValues.length
                       const min = Math.min(...validValues)
                       const max = Math.max(...validValues)
-                      
-                      popupContent += `<strong>Average NDVI:</strong> ${avg.toFixed(3)}<br>`
-                      popupContent += `<strong>Range:</strong> ${min.toFixed(3)} to ${max.toFixed(3)}<br>`
-                      
+
+                      ndviItems.push({ label: 'Average NDVI', value: formatNumber(avg, 3) })
+                      ndviItems.push({ label: 'Range', value: `${formatNumber(min, 3)} to ${formatNumber(max, 3)}` })
+
                       // Show health status
                       const healthStatus = avg > 0.5 ? 'Excellent' : avg > 0.2 ? 'Good' : 'Poor'
-                      const healthColor = avg > 0.5 ? '#10b981' : avg > 0.2 ? '#f59e0b' : '#ef4444'
-                      popupContent += `<strong>Health Status:</strong> <span style="color: ${healthColor}; font-weight: bold;">${healthStatus}</span><br>`
-                      
+                      ndviItems.push({ label: 'Health Status', value: healthStatus })
+
                       // Show recent measurements (last 3)
                       const recentData = ndviTimeSeries.slice(-3)
-                      popupContent += '<br><strong>Recent Measurements:</strong><br>'
-                      popupContent += '<div style="font-size: 11px; color: #555; max-height: 60px; overflow-y: auto;">'
-                      recentData.forEach((point: any) => {
-                        const date = new Date(point.date).toLocaleDateString()
-                        const value = point.mean?.toFixed(3) || 'N/A'
-                        popupContent += `${date}: ${value}<br>`
-                      })
-                      popupContent += '</div>'
+                      const recentMeasurements = recentData
+                        .map((point: any) => {
+                          const date = new Date(point.date).toLocaleDateString()
+                          const value = formatNumber(point.mean, 3)
+                          return `${date}: ${value}`
+                        })
+                        .join(', ')
+
+                      if (recentMeasurements) {
+                        ndviItems.push({ label: 'Recent', value: recentMeasurements })
+                      }
                     }
                   }
-                  popupContent += '</div>'
+
+                  sections.push({
+                    title: '📊 NDVI Crop Health Time Series',
+                    items: ndviItems,
+                    className: 'background: #f0f9ff; padding: 8px; border-radius: 4px; margin-bottom: 8px; border-left: 3px solid #10b981;'
+                  })
                 } else {
                   // Original soil statistics display
-                  popupContent += '<div style="background: #f8f9fa; padding: 8px; border-radius: 4px; margin-bottom: 8px;">'
-                  popupContent += '<strong style="color: #2563eb;">🌾 Soil Statistics</strong><br>'
-                  popupContent += `<strong>Average:</strong> ${farmlandStats.average?.toFixed(3) || 'N/A'}<br>`
-                  popupContent += `<strong>Min:</strong> ${farmlandStats.min?.toFixed(3) || 'N/A'}<br>`
-                  popupContent += `<strong>Max:</strong> ${farmlandStats.max?.toFixed(3) || 'N/A'}<br>`
-                  popupContent += `<strong>Count:</strong> ${farmlandStats.count?.toLocaleString() || 'N/A'} pixels<br>`
+                  const soilItems = [
+                    { label: 'Average', value: farmlandStats.average },
+                    { label: 'Min', value: farmlandStats.min },
+                    { label: 'Max', value: farmlandStats.max },
+                    { label: 'Count', value: farmlandStats.count ? `${farmlandStats.count.toLocaleString()} pixels` : null }
+                  ]
+
                   if (farmlandStats.stddev) {
-                    popupContent += `<strong>Std Dev:</strong> ${farmlandStats.stddev.toFixed(3)}<br>`
+                    soilItems.push({ label: 'Std Dev', value: farmlandStats.stddev })
                   }
-                  popupContent += '</div>'
+
+                  sections.push({
+                    title: '🌾 Soil Statistics',
+                    items: soilItems.filter(item => item.value !== null && item.value !== undefined)
+                  })
                 }
               }
 
               // Add feature properties
-              popupContent += '<div style="font-size: 12px; color: #666;">'
-              popupContent += '<strong>Properties:</strong><br>'
-              const propertiesToShow = Object.entries(feature.properties)
+              const propertyItems = Object.entries(feature.properties)
                 .slice(0, 4) // Show first 4 properties
-                .map(([key, value]) => `${key}: ${value}`)
-                .join('<br>')
-              popupContent += propertiesToShow
-              popupContent += '</div>'
+                .map(([key, value]) => ({ label: key, value }))
 
-              popupContent += '</div>'
-              return popupContent
+              if (propertyItems.length > 0) {
+                sections.push({
+                  title: 'Properties',
+                  items: propertyItems,
+                  className: 'font-size: 12px; color: #666; background: transparent; padding: 0; margin: 0;'
+                })
+              }
+
+              return createSafePopupContent({
+                title: matchedId ? `Farmland ID: ${matchedId}` : undefined,
+                sections
+              })
             }, {
               maxWidth: 300,
               className: 'farmland-popup'
@@ -1077,3 +1102,6 @@ export default function LeafletMap() {
     </div>
   )
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export default memo(LeafletMapComponent)

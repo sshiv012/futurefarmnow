@@ -234,7 +234,12 @@ class APIClient {
   /**
    * Get a single NDVI image as PNG for a specific date
    */
-  async getNDVIImage(params: { date: string; geometry: GeoJSONGeometry; source?: string }): Promise<Blob> {
+  async getNDVIImage(params: {
+    date: string;
+    geometry: GeoJSONGeometry;
+    source?: string;
+    signal?: AbortSignal;
+  }): Promise<Blob> {
     const queryParams = new URLSearchParams({
       date: params.date,
       ...(params.source && { source: params.source })
@@ -245,7 +250,8 @@ class APIClient {
       JSON.stringify(params.geometry),
       {
         headers: { 'Content-Type': 'text/plain' },
-        responseType: 'blob'
+        responseType: 'blob',
+        signal: params.signal // Pass abort signal to axios
       }
     )
     return response.data

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectOption } from '@/components/ui/select'
@@ -316,18 +316,17 @@ export function NDVIAnalysis() {
     setIsChangingImage(true)
 
     // Check if image is already cached
-    if (imageCache.has(date)) {
-      const imageUrl = imageCache.get(date)!
-      setCurrentImageUrl(imageUrl)
+    const cachedImageUrl = imageCache.get(date)
+    if (cachedImageUrl) {
+      setCurrentImageUrl(cachedImageUrl)
 
       // Show the image as an overlay on the map if we have drawn polygons
-      if (drawnPolygons && drawnPolygons.length > 0 && imageUrl.startsWith('data:image')) {
+      if (drawnPolygons && drawnPolygons.length > 0) {
         // Calculate bounds for multiple polygons
         const bounds = calculateMultiPolygonBounds(drawnPolygons)
         if (bounds) {
-          //console.log('Setting NDVI overlay with bounds:', bounds)
           // Add timestamp to URL to force update
-          const timestampedUrl = `${imageUrl}#${Date.now()}`
+          const timestampedUrl = `${cachedImageUrl}#${Date.now()}`
           setNDVIImageOverlay(timestampedUrl, bounds)
         }
       }
@@ -357,6 +356,18 @@ export function NDVIAnalysis() {
   const canAnalyzeFarmlands = useMemo(() => {
     return selectedDataset === 'farmland' && currentZoom >= 12 && currentBounds
   }, [selectedDataset, currentZoom, currentBounds])
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up all cached blob URLs when component unmounts
+      imageCache.forEach((url) => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url)
+        }
+      })
+    }
+  }, [imageCache])
 
   const handleAnalyzePolygon = () => {
     if (!drawnPolygons || drawnPolygons.length === 0) {

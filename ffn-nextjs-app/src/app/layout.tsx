@@ -45,21 +45,45 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <ThemeScript />
+
+        {/* Preconnect to external domains for faster resource loading */}
+        <link rel="preconnect" href="https://unpkg.com" />
+        <link rel="preconnect" href="https://a.tile.openstreetmap.org" />
+        <link rel="preconnect" href="https://b.tile.openstreetmap.org" />
+        <link rel="preconnect" href="https://c.tile.openstreetmap.org" />
+        <link rel="preconnect" href="https://a.basemaps.cartocdn.com" />
+        <link rel="preconnect" href="https://b.basemaps.cartocdn.com" />
+        <link rel="preconnect" href="https://c.basemaps.cartocdn.com" />
+        <link rel="preconnect" href="https://raptor.cs.ucr.edu" />
+        <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com" />
+
         {/* Favicon Links */}
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" type="image/svg+xml" />
         <link rel="shortcut icon" href="/favicon.svg" />
         <link rel="apple-touch-icon" href="/favicon.svg" />
-        
+
+        {/* Leaflet CSS with preload and fallback */}
+        <link
+          rel="preload"
+          as="style"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        />
         <link
           rel="stylesheet"
           href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-          crossOrigin=""
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          as="style"
+          href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
         />
         <link
           rel="stylesheet"
           href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+          crossOrigin="anonymous"
         />
       </head>
       <body className={inter.className}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen, Copy, Check } from 'lucide-react'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { NDVIAnalysis } from './NDVIAnalysis'
 import { SamplePoints } from './SamplePoints'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useState } from 'react'
+import { toast } from '@/lib/utils/toast'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -22,9 +23,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial }: SidebarProps) {
-  const { activeTab, setActiveTab, drawnPolygon } = useMapStore()
+  const { activeTab, setActiveTab, drawnPolygon, drawnPolygons } = useMapStore()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
+  const [copiedGeoJSON, setCopiedGeoJSON] = useState(false)
 
   return (
     <div className={cn(
@@ -120,30 +122,76 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
       {/* Area Status and Clear Analysis - Combined */}
       {!isCollapsed && (
         <div className="px-4 py-3 border-b">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             {/* Area Status */}
             {drawnPolygon ? (
-              <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                <MapPin className="h-4 w-4" />
-                <span className="text-sm font-medium">Area Selected ✓</span>
+              <div className="flex items-center space-x-1.5 text-green-600 dark:text-green-400 min-w-0">
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="text-xs font-medium truncate">Area Selected ✓</span>
               </div>
             ) : (
-              <div className="flex items-center space-x-2 text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                <span className="text-sm font-medium">No area selected</span>
+              <div className="flex items-center space-x-1.5 text-muted-foreground min-w-0">
+                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="text-xs font-medium truncate">No area selected</span>
               </div>
             )}
 
-            {/* Clear Analysis Button */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClearAnalysis}
-              className="text-sm"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear Analysis
-            </Button>
+            {/* Action Buttons */}
+            <div className="flex items-center space-x-1 flex-shrink-0">
+              {/* Copy GeoJSON Button - only show when area is selected */}
+              {drawnPolygon && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const geoJsonData = drawnPolygons && drawnPolygons.length > 1
+                      ? {
+                          type: 'MultiPolygon',
+                          coordinates: drawnPolygons.map(p => p.coordinates)
+                        }
+                      : drawnPolygons && drawnPolygons.length === 1
+                      ? drawnPolygons[0]
+                      : drawnPolygon;
+
+                    navigator.clipboard.writeText(JSON.stringify(geoJsonData, null, 2))
+                      .then(() => {
+                        setCopiedGeoJSON(true)
+                        toast.success('GeoJSON copied to clipboard!')
+                        setTimeout(() => setCopiedGeoJSON(false), 2000)
+                      })
+                      .catch(() => {
+                        toast.error('Failed to copy GeoJSON')
+                      })
+                  }}
+                  className="text-xs px-2 py-1 h-7"
+                  title="Copy GeoJSON to clipboard"
+                >
+                  {copiedGeoJSON ? (
+                    <>
+                      <Check className="h-3 w-3 mr-1 text-green-600" />
+                      <span className="hidden sm:inline">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3 sm:mr-1" />
+                      <span className="hidden sm:inline">Copy</span>
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {/* Clear Analysis Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClearAnalysis}
+                className="text-xs px-2 py-1 h-7"
+                title="Clear Analysis"
+              >
+                <Trash2 className="h-3 w-3 sm:mr-1" />
+                <span className="hidden sm:inline">Clear</span>
+              </Button>
+            </div>
           </div>
         </div>
       )}
