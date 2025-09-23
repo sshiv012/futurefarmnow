@@ -203,18 +203,16 @@ function LeafletMapComponent() {
       minZoom: 3,
       maxZoom: 19,
       zoomControl: true,
-      // Performance optimizations
-      preferCanvas: true, // Use canvas renderer for better performance
-      attributionControl: false, // We'll add our own attribution
+      preferCanvas: true,
+      attributionControl: false,
     })
 
     const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
-      // Performance optimizations for tiles
-      keepBuffer: 4,
-      updateWhenIdle: false,
-      updateWhenZooming: false,
+      keepBuffer: 6,
+      updateWhenIdle: true,
+      updateWhenZooming: true, // Allow updates during zoom for smoother experience
       zoomOffset: 0,
       tileSize: 256,
       crossOrigin: true,
@@ -281,6 +279,10 @@ function LeafletMapComponent() {
       drawnItems.addLayer(layer)
 
       const geoJSON = layer.toGeoJSON()
+      console.log('Drawn polygon coordinates:', geoJSON.geometry.coordinates)
+      console.log('Map center:', map.getCenter())
+      console.log('Map bounds:', map.getBounds())
+      console.log('Map CRS:', map.options.crs)
       addDrawnPolygon(geoJSON.geometry)
 
       toast.success('Polygon drawn successfully')
@@ -349,8 +351,7 @@ function LeafletMapComponent() {
       )
 
       if (needsUpdate) {
-        lastAppliedState.current = { center: newCenter, zoom: newZoom }
-        // Update state in one batch - this will trigger URL update
+        lastAppliedState.current = { center: newCenter, zoom: newZoom } // Update state in one batch
         setCurrentBounds(newBounds)
         setCurrentZoom(newZoom)
         setCurrentCenter(newCenter)
@@ -487,10 +488,9 @@ function LeafletMapComponent() {
         attribution: '© OpenStreetMap contributors, © CartoDB',
         maxZoom: 19,
         subdomains: 'abcd',
-        // Performance optimizations
-        keepBuffer: 4,
-        updateWhenIdle: false,
-        updateWhenZooming: false,
+        keepBuffer: 6,
+        updateWhenIdle: true,
+        updateWhenZooming: true,
         crossOrigin: true,
       })
     } else {
@@ -498,10 +498,9 @@ function LeafletMapComponent() {
       newTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
-        // Performance optimizations
-        keepBuffer: 4,
-        updateWhenIdle: false,
-        updateWhenZooming: false,
+        keepBuffer: 6,
+        updateWhenIdle: true,
+        updateWhenZooming: true,
         crossOrigin: true,
       })
     }
@@ -557,10 +556,9 @@ function LeafletMapComponent() {
         opacity: 0.7,
         attribution: 'FutureFarmNow',
         pane: 'vectorPane',
-        // Performance optimizations
-        keepBuffer: 2,
-        updateWhenIdle: false,
-        updateWhenZooming: false,
+        keepBuffer: 4,
+        updateWhenIdle: true,
+        updateWhenZooming: true,
         crossOrigin: true,
       })
 

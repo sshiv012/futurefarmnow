@@ -57,7 +57,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               >
                 <HelpCircle className="h-4 w-4" />
               </Button>
-              
+
               <Button
                 variant="ghost"
                 size="icon"
@@ -67,7 +67,7 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
               >
                 <BookOpen className="h-4 w-4" />
               </Button>
-              
+
               <ThemeToggle />
             </>
           )}
@@ -146,12 +146,12 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
                   onClick={() => {
                     const geoJsonData = drawnPolygons && drawnPolygons.length > 1
                       ? {
-                          type: 'MultiPolygon',
-                          coordinates: drawnPolygons.map(p => p.coordinates)
-                        }
+                        type: 'MultiPolygon',
+                        coordinates: drawnPolygons.map(p => p.coordinates)
+                      }
                       : drawnPolygons && drawnPolygons.length === 1
-                      ? drawnPolygons[0]
-                      : drawnPolygon;
+                        ? drawnPolygons[0]
+                        : drawnPolygon;
 
                     navigator.clipboard.writeText(JSON.stringify(geoJsonData, null, 2))
                       .then(() => {
