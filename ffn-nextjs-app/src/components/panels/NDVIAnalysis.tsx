@@ -184,11 +184,10 @@ export function NDVIAnalysis() {
   }, [drawnPolygons, dataSource, setImageCache, setCurrentSliderDate, setCurrentImageUrl, setShowTimeSlider, setNDVIImageOverlay, calculateMultiPolygonBounds])
 
   // Function to load remaining images asynchronously in parallel
-  const loadRemainingImagesAsync = async (dates: string[]) => {
-    if (!drawnPolygons || drawnPolygons.length === 0 || dates.length === 0) return
+  const loadRemainingImagesAsync = async (allDates: string[], datesToLoad: string[]) => {
+    if (!drawnPolygons || drawnPolygons.length === 0 || datesToLoad.length === 0) return
 
-    // Set up metadata with available dates
-    const allDates = [currentSliderDate, ...dates].filter(Boolean).sort()
+    // Set up metadata with ALL available dates immediately (including first date already loaded)
     setImageMetadata({
       available_dates: allDates,
       token: 'simplified',
@@ -196,8 +195,8 @@ export function NDVIAnalysis() {
       statistics_per_date: {}
     })
 
-    // Load images in parallel and wait for completion
-    const promises = dates.map(date => loadImageForDate(date, false)) // No map show for parallel loading
+    // Load remaining images in parallel and wait for completion
+    const promises = datesToLoad.map(date => loadImageForDate(date, false)) // No map show for parallel loading
     await Promise.all(promises)
 
     // All images loaded
@@ -290,11 +289,15 @@ export function NDVIAnalysis() {
             setIsInitialLoading(true)
             toast('Loading satellite images...', { icon: '🛰️' })
 
-            const firstDate = resultsData[0].date
+            const allDates = resultsData.map((point: any) => point.date).sort()
+            const firstDate = allDates[0]
+            const remainingDates = allDates.slice(1)
+
             await loadImageForDate(firstDate, true) // Load first image and show on map
 
             // Start loading other images in parallel asynchronously
-            await loadRemainingImagesAsync(resultsData.map((point: any) => point.date).slice(1))
+            // Pass all dates (including first) so metadata is set immediately
+            await loadRemainingImagesAsync(allDates, remainingDates)
           }
         } else {
           toast.success('Analysis completed - but no data found for this period')
@@ -759,8 +762,8 @@ export function NDVIAnalysis() {
                 className="w-full"
                 style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
               >
-                <SelectOption value="ndvi">Sentinel-2 (OLD)</SelectOption>
-                <SelectOption value="sentinel">Sentinel-2</SelectOption>
+                <SelectOption value="sentinel">Sentinel-2 (OLD)</SelectOption>
+                <SelectOption value="ndvi">Sentinel-2</SelectOption>
                 <SelectOption value="landsat">Landsat 8/9</SelectOption>
               </Select>
             </div>

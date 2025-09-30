@@ -101,8 +101,22 @@ function renderSingleChart(
       let statusColor = '#6b7280'
 
       if (currentValue !== null) {
-        healthStatus = currentValue > 0.7 ? 'Excellent' : currentValue > 0.4 ? 'Good' : 'Poor'
-        statusColor = currentValue > 0.7 ? '#059669' : currentValue > 0.4 ? '#d97706' : '#dc2626'
+        if (currentValue <= 0.07) {
+          healthStatus = 'No Vegetation'
+          statusColor = '#6b7280' // gray
+        } else if (currentValue <= 0.3) {
+          healthStatus = 'Poor'
+          statusColor = '#dc2626' // red
+        } else if (currentValue <= 0.5) {
+          healthStatus = 'Moderate'
+          statusColor = '#d97706' // yellow/orange
+        } else if (currentValue <= 0.7) {
+          healthStatus = 'Good'
+          statusColor = '#84cc16' // lime
+        } else {
+          healthStatus = 'Excellent'
+          statusColor = '#059669' // green
+        }
       }
 
       return (
@@ -290,7 +304,16 @@ export function TimeSeriesChart({
 
   // Auto-start playing when enabled (only once when component mounts with data)
   const hasAutoStarted = useRef(false)
+  const prevAvailableDatesLength = useRef(0)
+
   useEffect(() => {
+    // Reset hasAutoStarted if availableDates changes (new analysis)
+    const currentLength = availableDates?.length || 0
+    if (currentLength !== prevAvailableDatesLength.current) {
+      hasAutoStarted.current = false
+      prevAvailableDatesLength.current = currentLength
+    }
+
     if (enableAutoPlay && availableDates && availableDates.length > 1 && selectedDate && !hasAutoStarted.current) {
       hasAutoStarted.current = true
       const timer = setTimeout(() => {

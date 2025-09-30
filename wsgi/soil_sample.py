@@ -121,6 +121,7 @@ def process_request(query_params, query_geometry):
     soil_depth = query_params.get("soildepth")
     layers = query_params.getlist("layer")
     num_points = int(query_params.get("num_points"))
+    print(f"[SAMPLE_DEBUG] process_request: soildepth={soil_depth}, layers={layers}, num_points={num_points}", file=sys.stderr)
 
     # Calculate layer values at each point
     df = output_from_attr(
@@ -130,9 +131,11 @@ def process_request(query_params, query_geometry):
         attribute_list=layers,
         num_samples=num_points
     )
+    print(f"[SAMPLE_DEBUG] After output_from_attr: df shape={df.shape}, columns={list(df.columns)}", file=sys.stderr)
 
     # Choose what points to use
     sample_df = select_points(df, num_samples=num_points, epsg_code=4326)
+    print(f"[SAMPLE_DEBUG] After select_points: sample_df shape={sample_df.shape}, requested={num_points}, actual={len(sample_df)}", file=sys.stderr)
 
     # Calculate statistics for the layers
     statistics = calculate_statistics(sample_df, df)
@@ -145,6 +148,7 @@ def process_request(query_params, query_geometry):
             "layers": statistics
         }
     }
+    print(f"[SAMPLE_DEBUG] Response: Returning {len(response_data['results'])} sample points", file=sys.stderr)
 
     response = make_response(jsonify(response_data))
     # Add CORS headers

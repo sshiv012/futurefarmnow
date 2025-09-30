@@ -44,6 +44,9 @@ class NDVIServlet extends AbstractWebHandler with Logging {
   /** The path at which this server keeps Landsat datasets */
   var landsatDataPath: Path = _
   
+  /** The path at which this server keeps Sentinel-2 datasets */
+  var sentinel2DataPath: Path = _
+  
   /** Base data path */
   var baseDataPath: Path = _
 
@@ -53,8 +56,9 @@ class NDVIServlet extends AbstractWebHandler with Logging {
     this.sparkSession = ss
     val dataPath: String = opts.getString("datapath", "data")
     baseDataPath = new Path(dataPath)
-    ndviDataPath = new Path(dataPath, "NDVI")
+    ndviDataPath = new Path(dataPath, "SENTINEL2")
     landsatDataPath = new Path(dataPath, "LANDSAT")
+    sentinel2DataPath = new Path(dataPath, "NDVI")
 
     // Build indexes if not existent for both NDVI and Landsat data
     val sc = ss.sparkContext
@@ -101,12 +105,13 @@ class NDVIServlet extends AbstractWebHandler with Logging {
 
   /**
    * Get the data path based on the data source parameter
-   * @param dataSource The data source type ("landsat" or default "ndvi")
+   * @param dataSource The data source type ("landsat", "sentinel", or default "ndvi")
    * @return The appropriate data path
    */
   private def getDataPath(dataSource: String): Path = {
     dataSource.toLowerCase match {
       case "landsat" => landsatDataPath
+      case "sentinel" => sentinel2DataPath
       case _ => ndviDataPath // Default to NDVI
     }
   }
