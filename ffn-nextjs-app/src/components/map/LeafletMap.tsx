@@ -24,6 +24,7 @@ function LeafletMapComponent() {
   const vectorTileLayerRef = useRef<L.TileLayer | null>(null)
   const soilImageOverlayRef = useRef<L.ImageOverlay | null>(null)
   const ndviImageOverlayRef = useRef<L.ImageOverlay | null>(null)
+  const etmapImageOverlayRef = useRef<L.ImageOverlay | null>(null)
   const farmlandLayerRef = useRef<L.GeoJSON | null>(null)
   const samplePointsLayerRef = useRef<L.LayerGroup | null>(null)
   const drawnItemsRef = useRef<L.FeatureGroup | null>(null)
@@ -46,6 +47,8 @@ function LeafletMapComponent() {
     soilImageBounds,
     ndviImageUrl,
     ndviImageBounds,
+    etmapImageUrl,
+    etmapImageBounds,
     farmlandGeoJSON,
     samplePoints,
     setCurrentBounds,
@@ -695,6 +698,45 @@ function LeafletMapComponent() {
       }
     }
   }, [ndviImageUrl, ndviImageBounds, soilImageUrl])
+
+  // ETMap image overlay effect
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+
+    // Store reference to current overlay for cleanup
+    const currentOverlay = etmapImageOverlayRef.current
+
+    // Remove existing overlay
+    if (currentOverlay) {
+      mapInstanceRef.current.removeLayer(currentOverlay)
+      etmapImageOverlayRef.current = null
+    }
+
+    ensureDrawnItemsOnTop()
+
+    let newOverlay: L.ImageOverlay | null = null
+    if (etmapImageUrl && etmapImageBounds) {
+      newOverlay = L.imageOverlay(etmapImageUrl, etmapImageBounds, {
+        opacity: 1.0,
+        className: 'etmap-image-overlay',
+        pane: 'imagePane'
+      })
+
+      newOverlay.addTo(mapInstanceRef.current)
+      etmapImageOverlayRef.current = newOverlay
+    }
+
+    // Cleanup function
+    return () => {
+      if (newOverlay && mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.removeLayer(newOverlay)
+        } catch (e) {
+          // Layer might already be removed, ignore error
+        }
+      }
+    }
+  }, [etmapImageUrl, etmapImageBounds])
 
   useEffect(() => {
     if (!mapInstanceRef.current) return

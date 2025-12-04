@@ -16,6 +16,9 @@ interface MapState {
   farmlandGeoJSON: any | null
   ndviImageUrl: string | null
   ndviImageBounds: [[number, number], [number, number]] | null
+  etmapImageUrl: string | null
+  etmapImageBounds: [[number, number], [number, number]] | null
+  etmapRequestId: string | null
   samplePoints: Array<{id: number, x: number, y: number}> | null
   selectedSoilLayer: SoilLayerEnum
   selectedSoilDepth: string
@@ -25,7 +28,7 @@ interface MapState {
   }
 
   // UI state
-  activeTab: 'soil' | 'ndvi' | 'sample'
+  activeTab: 'soil' | 'ndvi' | 'sample' | 'etmap'
   isAnalyzing: boolean
   clearTrigger: number // Incremented when clear is triggered
 
@@ -42,6 +45,8 @@ interface MapState {
   setSoilImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
   setFarmlandGeoJSON: (geoJSON: any | null) => void
   setNDVIImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
+  setETMapImageOverlay: (url: string | null, bounds: [[number, number], [number, number]] | null) => void
+  setETMapRequestId: (id: string | null) => void
   setSamplePoints: (points: Array<{id: number, x: number, y: number}> | null) => void
   clearArea: () => void
   clearAllAnalysis: () => void
@@ -49,7 +54,7 @@ interface MapState {
   setSelectedSoilLayer: (layer: SoilLayerEnum) => void
   setSelectedSoilDepth: (depth: string) => void
   setSelectedDateRange: (range: { from: string; to: string }) => void
-  setActiveTab: (tab: 'soil' | 'ndvi' | 'sample') => void
+  setActiveTab: (tab: 'soil' | 'ndvi' | 'sample' | 'etmap') => void
   setIsAnalyzing: (analyzing: boolean) => void
   reset: () => void
 }
@@ -68,6 +73,9 @@ export const useMapStore = create<MapState>((set, get) => ({
   farmlandGeoJSON: null,
   ndviImageUrl: null,
   ndviImageBounds: null,
+  etmapImageUrl: null,
+  etmapImageBounds: null,
+  etmapRequestId: null,
   samplePoints: null,
   selectedSoilLayer: 'ph',
   selectedSoilDepth: '0-5',
@@ -94,13 +102,15 @@ export const useMapStore = create<MapState>((set, get) => ({
   setSoilImageOverlay: (url, bounds) => set({ soilImageUrl: url, soilImageBounds: bounds }),
   setFarmlandGeoJSON: (geoJSON) => set({ farmlandGeoJSON: geoJSON }),
   setNDVIImageOverlay: (url, bounds) => set({ ndviImageUrl: url, ndviImageBounds: bounds }),
+  setETMapImageOverlay: (url, bounds) => set({ etmapImageUrl: url, etmapImageBounds: bounds }),
+  setETMapRequestId: (id) => set({ etmapRequestId: id }),
   setSamplePoints: (points) => set({ samplePoints: points }),
   clearArea: () => {
     const { drawnItems } = get()
     if (drawnItems) {
       drawnItems.clearLayers()
     }
-    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null, ndviImageUrl: null, ndviImageBounds: null, samplePoints: null })
+    set({ drawnPolygon: null, drawnPolygons: [], soilImageUrl: null, soilImageBounds: null, farmlandGeoJSON: null, ndviImageUrl: null, ndviImageBounds: null, etmapImageUrl: null, etmapImageBounds: null, etmapRequestId: null, samplePoints: null })
   },
   clearAllAnalysis: () => {
     const { drawnItems, clearTrigger } = get()
@@ -115,6 +125,9 @@ export const useMapStore = create<MapState>((set, get) => ({
       farmlandGeoJSON: null,
       ndviImageUrl: null,
       ndviImageBounds: null,
+      etmapImageUrl: null,
+      etmapImageBounds: null,
+      etmapRequestId: null,
       samplePoints: null,
       isAnalyzing: false,
       clearTrigger: clearTrigger + 1
@@ -145,6 +158,12 @@ export const useMapStore = create<MapState>((set, get) => ({
     soilImageUrl: null,
     soilImageBounds: null,
     farmlandGeoJSON: null,
+    ndviImageUrl: null,
+    ndviImageBounds: null,
+    etmapImageUrl: null,
+    etmapImageBounds: null,
+    etmapRequestId: null,
+    samplePoints: null,
     selectedSoilLayer: 'ph',
     selectedSoilDepth: '0-5',
     selectedDateRange: {

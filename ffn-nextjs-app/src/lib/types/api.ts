@@ -118,3 +118,36 @@ export interface APIError {
   code?: string
   details?: any
 }
+
+// ETMap Types
+export type ETMapStatus =
+  | 'pending'
+  | 'landsat_started'
+  | 'prism_started'
+  | 'nldas_started'
+  | 'calculation_started'
+  | 'calculation_complete'
+  | 'completed'
+  | 'failed'
+
+export interface ETMapStatusResponse {
+  request_id: string
+  status: ETMapStatus
+  stage?: string
+  message?: string
+  result_url?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface ETMapSubmitParams {
+  geometry: GeoJSONGeometry
+  dateFrom: string
+  dateTo: string
+}
+
+export interface ETMapSubmitResponse {
+  request_id: string
+  status: ETMapStatus
+  message?: string
+}

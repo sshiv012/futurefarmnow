@@ -10,6 +10,7 @@ import { DatasetSelector } from './DatasetSelector'
 import { SoilAnalysis } from './SoilAnalysis'
 import { NDVIAnalysis } from './NDVIAnalysis'
 import { SamplePoints } from './SamplePoints'
+import { ETMapAnalysis } from './ETMapAnalysis'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useState } from 'react'
 import { toast } from '@/lib/utils/toast'
@@ -221,24 +222,36 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
             size="icon"
             onClick={() => setActiveTab('soil')}
             title="Soil Analysis"
+            className="text-xs font-medium"
           >
-            🌱
+            S
           </Button>
           <Button
             variant={activeTab === 'ndvi' ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setActiveTab('ndvi')}
             title="NDVI Analysis"
+            className="text-xs font-medium"
           >
-            📊
+            N
           </Button>
           <Button
             variant={activeTab === 'sample' ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setActiveTab('sample')}
             title="Sample Points"
+            className="text-xs font-medium"
           >
-            📍
+            P
+          </Button>
+          <Button
+            variant={activeTab === 'etmap' ? 'default' : 'ghost'}
+            size="icon"
+            onClick={() => setActiveTab('etmap')}
+            title="ET Map"
+            className="text-xs font-medium"
+          >
+            ET
           </Button>
         </div>
       ) : (
@@ -252,27 +265,34 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
           <div className="flex-1 overflow-hidden flex flex-col">
             <div className="px-4 py-3 border-b" data-tutorial="analysis-tabs">
               <Tabs className="w-full">
-                <TabsList className="grid grid-cols-3 w-full">
+                <TabsList className="grid grid-cols-4 w-full">
                   <TabsTrigger
                     value="soil"
                     active={activeTab === 'soil'}
                     onClick={() => setActiveTab('soil')}
                   >
-                    🌱 Soil
+                    Soil
                   </TabsTrigger>
                   <TabsTrigger
                     value="ndvi"
                     active={activeTab === 'ndvi'}
                     onClick={() => setActiveTab('ndvi')}
                   >
-                    📊 NDVI
+                    NDVI
                   </TabsTrigger>
                   <TabsTrigger
                     value="sample"
                     active={activeTab === 'sample'}
                     onClick={() => setActiveTab('sample')}
                   >
-                    📍 Sample
+                    Sample
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="etmap"
+                    active={activeTab === 'etmap'}
+                    onClick={() => setActiveTab('etmap')}
+                  >
+                    ETMap
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -291,6 +311,10 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
 
                 <TabsContent value="sample" active={activeTab === 'sample'}>
                   <SamplePoints />
+                </TabsContent>
+
+                <TabsContent value="etmap" active={activeTab === 'etmap'}>
+                  <ETMapAnalysis />
                 </TabsContent>
               </Tabs>
             </div>

@@ -12,7 +12,10 @@ import {
   SoilAnalysisParams,
   NDVIAnalysisParams,
   SoilSampleParams,
-  APIError
+  APIError,
+  ETMapSubmitParams,
+  ETMapSubmitResponse,
+  ETMapStatusResponse
 } from '@/lib/types/api'
 
 class APIClient {
@@ -253,6 +256,75 @@ class APIClient {
         responseType: 'blob',
         signal: params.signal // Pass abort signal to axios
       }
+    )
+    return response.data
+  }
+
+  // ETMap API Methods
+  // Uses separate base URL for ETMap backend (local dev server)
+  private etmapBaseUrl = 'http://127.0.0.1:5200'
+
+  /**
+   * Submit an ETMap calculation request
+   */
+  async submitETMapRequest(params: ETMapSubmitParams): Promise<ETMapSubmitResponse> {
+    const payload = {
+      date_from: params.dateFrom,
+      date_to: params.dateTo,
+      geometry: params.geometry
+    }
+
+    const response: AxiosResponse<ETMapSubmitResponse> = await axios.post(
+      `${this.etmapBaseUrl}/etmap`,
+      payload,
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      }
+    )
+    return response.data
+  }
+
+  /**
+   * Get the status of an ETMap request
+   */
+  async getETMapStatus(requestId: string): Promise<ETMapStatusResponse> {
+    const response: AxiosResponse<ETMapStatusResponse> = await axios.get(
+      `${this.etmapBaseUrl}/etmap/${requestId}.json`,
+      { timeout: 30000 }
+    )
+    return response.data
+  }
+
+  /**
+   * Get the ETMap result data
+   */
+  async getETMapResult(requestId: string): Promise<any> {
+    const response: AxiosResponse<any> = await axios.get(
+      `${this.etmapBaseUrl}/etmap/${requestId}/result`,
+      { timeout: 30000 }
+    )
+    return response.data
+  }
+
+  /**
+   * Get the ETMap PNG image
+   */
+  async getETMapImage(requestId: string): Promise<Blob> {
+    const response: AxiosResponse<Blob> = await axios.get(
+      `${this.etmapBaseUrl}/etmap/${requestId}.png`,
+      { responseType: 'blob', timeout: 60000 }
+    )
+    return response.data
+  }
+
+  /**
+   * Download the ETMap GeoTIFF file
+   */
+  async downloadETMapTif(requestId: string): Promise<Blob> {
+    const response: AxiosResponse<Blob> = await axios.get(
+      `${this.etmapBaseUrl}/etmap/${requestId}.tif`,
+      { responseType: 'blob', timeout: 60000 }
     )
     return response.data
   }
