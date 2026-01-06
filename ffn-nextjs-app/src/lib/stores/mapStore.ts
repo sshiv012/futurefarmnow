@@ -80,8 +80,8 @@ export const useMapStore = create<MapState>((set, get) => ({
   selectedSoilLayer: 'ph',
   selectedSoilDepth: '0-5',
   selectedDateRange: {
-    from: '2024-01-01',
-    to: '2024-12-31',
+    from: '2025-01-01',
+    to: '2025-01-02',
   },
   activeTab: 'soil',
   isAnalyzing: false,
@@ -167,8 +167,8 @@ export const useMapStore = create<MapState>((set, get) => ({
     selectedSoilLayer: 'ph',
     selectedSoilDepth: '0-5',
     selectedDateRange: {
-      from: '2024-01-01',
-      to: '2024-12-31',
+      from: '2025-01-01',
+      to: '2025-02-28',
     },
     activeTab: 'soil',
     isAnalyzing: false,

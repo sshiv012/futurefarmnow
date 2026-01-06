@@ -11,7 +11,7 @@ import { SoilLayerEnum, GeoJSONGeometry } from '@/lib/types/api'
 import { BoxWhiskerPlot } from '@/components/visualizations/BoxWhiskerPlot'
 import { Legend } from '@/components/visualizations/Legend'
 import { SoilLegend } from '@/components/visualizations/SoilLegend'
-import { AlertCircle, BarChart3, MapPin, X, Download, RotateCcw, Layers } from 'lucide-react'
+import { AlertCircle, BarChart3, MapPin, X, Download, Layers } from 'lucide-react'
 import { toast } from '@/lib/utils/toast'
 
 const SOIL_LAYERS: { value: SoilLayerEnum; label: string; description: string }[] = [
@@ -935,8 +935,7 @@ export function SoilAnalysis() {
                 onClick={handleReset}
                 className="text-xs"
               >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Reset
+                Clear Results
               </Button>
             </div>
           </div>
@@ -1046,8 +1045,7 @@ export function SoilAnalysis() {
                 onClick={handleReset}
                 className="text-xs"
               >
-                <RotateCcw className="h-3 w-3 mr-1" />
-                Reset
+                Clear Results
               </Button>
             </div>
           </div>

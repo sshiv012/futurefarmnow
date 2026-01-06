@@ -261,9 +261,6 @@ class APIClient {
   }
 
   // ETMap API Methods
-  // Uses separate base URL for ETMap backend (local dev server)
-  private etmapBaseUrl = 'http://127.0.0.1:5200'
-
   /**
    * Submit an ETMap calculation request
    */
@@ -274,13 +271,9 @@ class APIClient {
       geometry: params.geometry
     }
 
-    const response: AxiosResponse<ETMapSubmitResponse> = await axios.post(
-      `${this.etmapBaseUrl}/etmap`,
-      payload,
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 30000
-      }
+    const response: AxiosResponse<ETMapSubmitResponse> = await this.client.post(
+      '/etmap',
+      payload
     )
     return response.data
   }
@@ -289,9 +282,8 @@ class APIClient {
    * Get the status of an ETMap request
    */
   async getETMapStatus(requestId: string): Promise<ETMapStatusResponse> {
-    const response: AxiosResponse<ETMapStatusResponse> = await axios.get(
-      `${this.etmapBaseUrl}/etmap/${requestId}.json`,
-      { timeout: 30000 }
+    const response: AxiosResponse<ETMapStatusResponse> = await this.client.get(
+      `/etmap/${requestId}.json`
     )
     return response.data
   }
@@ -300,9 +292,8 @@ class APIClient {
    * Get the ETMap result data
    */
   async getETMapResult(requestId: string): Promise<any> {
-    const response: AxiosResponse<any> = await axios.get(
-      `${this.etmapBaseUrl}/etmap/${requestId}/result`,
-      { timeout: 30000 }
+    const response: AxiosResponse<any> = await this.client.get(
+      `/etmap/${requestId}/result`
     )
     return response.data
   }
@@ -311,8 +302,8 @@ class APIClient {
    * Get the ETMap PNG image
    */
   async getETMapImage(requestId: string): Promise<Blob> {
-    const response: AxiosResponse<Blob> = await axios.get(
-      `${this.etmapBaseUrl}/etmap/${requestId}.png`,
+    const response: AxiosResponse<Blob> = await this.client.get(
+      `/etmap/${requestId}.png`,
       { responseType: 'blob', timeout: 60000 }
     )
     return response.data
@@ -322,8 +313,8 @@ class APIClient {
    * Download the ETMap GeoTIFF file
    */
   async downloadETMapTif(requestId: string): Promise<Blob> {
-    const response: AxiosResponse<Blob> = await axios.get(
-      `${this.etmapBaseUrl}/etmap/${requestId}.tif`,
+    const response: AxiosResponse<Blob> = await this.client.get(
+      `/etmap/${requestId}.tif`,
       { responseType: 'blob', timeout: 60000 }
     )
     return response.data

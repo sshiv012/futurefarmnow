@@ -119,22 +119,35 @@ export interface APIError {
   details?: any
 }
 
-// ETMap Types
+// ETMap Types - Must match backend JobStatus enum in job_manager.py
 export type ETMapStatus =
-  | 'pending'
-  | 'landsat_started'
-  | 'prism_started'
-  | 'nldas_started'
-  | 'calculation_started'
-  | 'calculation_complete'
-  | 'completed'
-  | 'failed'
+  | 'queued'              // Initial state when job is created
+  | 'claimed'             // Worker has claimed the job
+  | 'checking_coverage'   // Checking data coverage
+  | 'landsat_started'     // Fetching Landsat data
+  | 'landsat_done'        // Landsat fetch complete
+  | 'landsat_error'       // Landsat fetch failed
+  | 'landsat_skipped_covered' // Landsat data already available
+  | 'prism_started'       // Fetching PRISM data
+  | 'prism_done'          // PRISM fetch complete
+  | 'prism_error'         // PRISM fetch failed
+  | 'prism_skipped_covered'   // PRISM data already available
+  | 'nldas_started'       // Fetching NLDAS data
+  | 'nldas_done'          // NLDAS fetch complete
+  | 'nldas_error'         // NLDAS fetch failed
+  | 'nldas_skipped_covered'   // NLDAS data already available
+  | 'success'             // Data collection complete
+  | 'calculation_started' // ET calculation in progress
+  | 'calculation_complete'// ET calculation finished
+  | 'calculation_failed'  // ET calculation failed
+  | 'failed'              // General failure
 
 export interface ETMapStatusResponse {
   request_id: string
   status: ETMapStatus
   stage?: string
   message?: string
+  error_message?: string  // Backend sends this field for error details
   result_url?: string
   created_at?: string
   updated_at?: string

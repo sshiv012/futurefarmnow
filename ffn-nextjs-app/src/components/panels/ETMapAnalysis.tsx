@@ -11,19 +11,43 @@ import { GeoJSONGeometry, ETMapStatusResponse, ETMapStatus } from '@/lib/types/a
 import { cn } from '@/lib/utils'
 import { formatDateString, parseDate } from '@/lib/utils'
 
-// Status stages definition
-const STAGES: { key: ETMapStatus; label: string }[] = [
-  { key: 'pending', label: 'Pending' },
-  { key: 'landsat_started', label: 'Fetching Landsat Data' },
-  { key: 'prism_started', label: 'Fetching PRISM Data' },
-  { key: 'nldas_started', label: 'Fetching NLDAS Data' },
+// Status stages definition - maps backend statuses to UI display stages
+// Multiple backend statuses can map to the same UI stage
+const STAGES: { key: ETMapStatus; label: string; alternateKeys?: ETMapStatus[] }[] = [
+  { key: 'queued', label: 'Queued', alternateKeys: ['claimed', 'checking_coverage'] },
+  { key: 'landsat_started', label: 'Fetching Landsat Data', alternateKeys: ['landsat_done', 'landsat_skipped_covered'] },
+  { key: 'prism_started', label: 'Fetching PRISM Data', alternateKeys: ['prism_done', 'prism_skipped_covered'] },
+  { key: 'nldas_started', label: 'Fetching NLDAS Data', alternateKeys: ['nldas_done', 'nldas_skipped_covered', 'success'] },
   { key: 'calculation_started', label: 'Calculating ET Map' },
   { key: 'calculation_complete', label: 'Completed' },
 ]
 
-// Helper to check if status is complete (handles both 'completed' and 'calculation_complete')
+// Helper to find which stage index a status belongs to
+function getStageIndex(status: ETMapStatus | undefined): number {
+  if (!status) return -1
+  for (let i = 0; i < STAGES.length; i++) {
+    const stage = STAGES[i]
+    if (stage.key === status) return i
+    if (stage.alternateKeys?.includes(status)) return i
+  }
+  // Handle error statuses - show at the stage they failed
+  if (status === 'landsat_error') return 1
+  if (status === 'prism_error') return 2
+  if (status === 'nldas_error') return 3
+  if (status === 'calculation_failed') return 4
+  if (status === 'failed') return 0 // General failure at start
+  return -1
+}
+
+// Helper to check if status is complete
 const isStatusComplete = (status: ETMapStatus | undefined): boolean => {
-  return status === 'completed' || status === 'calculation_complete'
+  return status === 'calculation_complete'
+}
+
+// Helper to check if status is a failure
+const isStatusFailed = (status: ETMapStatus | undefined): boolean => {
+  return status === 'failed' || status === 'landsat_error' || status === 'prism_error' ||
+         status === 'nldas_error' || status === 'calculation_failed'
 }
 
 // History entry type
@@ -181,6 +205,8 @@ export function ETMapAnalysis() {
   const [history, setHistory] = useState<ETMapHistoryEntry[]>([])
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false)
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null)
+  const [savedRequestId, setSavedRequestId] = useState<string | null>(null) // Saved but not yet loaded
+  const [showDateRangeWarning, setShowDateRangeWarning] = useState(false) // Confirmation dialog for long date ranges
 
   const isPollingRef = useRef(false)
   const pollStartTimeRef = useRef<number | null>(null)
@@ -217,14 +243,14 @@ export function ETMapAnalysis() {
     }
   }, [clearTrigger, setETMapImageOverlay, setETMapRequestId])
 
-  // Restore request_id from localStorage on mount
+  // Check for saved request_id from localStorage on mount (don't auto-load)
   useEffect(() => {
     const savedId = localStorage.getItem(LOCALSTORAGE_KEY)
     if (savedId && !requestId) {
-      setRequestId(savedId)
-      setETMapRequestId(savedId)
+      // Don't auto-load - just store it so user can choose to resume
+      setSavedRequestId(savedId)
     }
-  }, [requestId, setETMapRequestId])
+  }, [requestId])
 
   // Start polling when requestId is set
   useEffect(() => {
@@ -292,9 +318,9 @@ export function ETMapAnalysis() {
           return
         }
 
-        if (status.status === 'failed') {
+        if (isStatusFailed(status.status)) {
           isPollingRef.current = false
-          toast.error(status.message || 'ET Map calculation failed')
+          toast.error(status.message || status.error_message || 'ET Map calculation failed')
           return
         }
 
@@ -313,6 +339,13 @@ export function ETMapAnalysis() {
     poll()
   }, [requestId, setETMapImageOverlay])
 
+  // Helper to calculate total days in date range
+  const calculateTotalDays = () => {
+    const fromDate = parseDate(selectedDateRange.from)
+    const toDate = parseDate(selectedDateRange.to)
+    return Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+  }
+
   const handleSubmit = async () => {
     if (!drawnPolygons || drawnPolygons.length === 0) {
       toast.error('Please draw a farm area on the map first!')
@@ -325,6 +358,26 @@ export function ETMapAnalysis() {
       toast.error(`Area too large (${areaSqMiles.toFixed(1)} sq mi). Maximum is ${MAX_AREA_SQ_MILES} sq miles.`)
       return
     }
+
+    // Validate date range - max 31 days (1 month)
+    const totalDays = calculateTotalDays()
+    if (totalDays > 31) {
+      toast.error('Date range too large. Maximum allowed is 1 month (31 days).')
+      return
+    }
+
+    // Show warning for date ranges > 3 days
+    if (totalDays > 3) {
+      setShowDateRangeWarning(true)
+      return
+    }
+
+    // Proceed with submission
+    await submitETMapRequest()
+  }
+
+  const submitETMapRequest = async () => {
+    setShowDateRangeWarning(false)
 
     // Clear previous results
     setJobStatus(null)
@@ -474,8 +527,8 @@ export function ETMapAnalysis() {
         } catch (imgError) {
           console.error('Failed to load ET Map image:', imgError)
         }
-      } else if (status.status === 'failed') {
-        toast.error(status.message || 'This request failed')
+      } else if (isStatusFailed(status.status)) {
+        toast.error(status.message || status.error_message || 'This request failed')
       } else {
         // Still processing - start polling
         toast.success('Loaded history entry - still processing...')
@@ -532,8 +585,8 @@ export function ETMapAnalysis() {
         } catch (imgError) {
           console.error('Failed to load ET Map image:', imgError)
         }
-      } else if (status.status === 'failed') {
-        toast.error(status.message || 'ET Map calculation failed')
+      } else if (isStatusFailed(status.status)) {
+        toast.error(status.message || status.error_message || 'ET Map calculation failed')
       } else {
         toast.success('Status updated')
       }
@@ -605,6 +658,7 @@ export function ETMapAnalysis() {
     setETMapRequestId(null)
     setETMapImageOverlay(null, null)
     setSelectedHistoryId(null)
+    setSavedRequestId(null)
     isPollingRef.current = false
     if (pollTimeoutRef.current) {
       clearTimeout(pollTimeoutRef.current)
@@ -612,9 +666,62 @@ export function ETMapAnalysis() {
     localStorage.removeItem(LOCALSTORAGE_KEY)
   }
 
+  const handleLoadSavedRequest = async () => {
+    if (!savedRequestId) return
+
+    setIsRefreshing(true)
+    try {
+      // Fetch the current status
+      const status = await apiClient.getETMapStatus(savedRequestId)
+      setJobStatus(status)
+      setRequestId(savedRequestId)
+      setETMapRequestId(savedRequestId)
+      setSavedRequestId(null) // Clear the saved state since it's now active
+
+      // Try to find geometry from history
+      const historyEntry = history.find(h => h.requestId === savedRequestId)
+      if (historyEntry) {
+        currentGeometryRef.current = historyEntry.geometry
+        setSelectedHistoryId(savedRequestId)
+      }
+
+      // If completed, load the image
+      if (isStatusComplete(status.status)) {
+        try {
+          const imageBlob = await apiClient.getETMapImage(savedRequestId)
+          const imageUrl = URL.createObjectURL(imageBlob)
+          const bounds = calculateMultiPolygonBounds(currentGeometryRef.current)
+          if (bounds) {
+            setETMapImageOverlay(imageUrl, bounds)
+          }
+          toast.success('ET Map loaded!')
+        } catch (imgError) {
+          console.error('Failed to load ET Map image:', imgError)
+        }
+      } else if (isStatusFailed(status.status)) {
+        toast.error(status.message || status.error_message || 'This request failed')
+      } else {
+        toast.success('Resuming request - processing in progress...')
+      }
+    } catch (error: any) {
+      console.error('Failed to load saved request:', error)
+      toast.error('Failed to load saved request')
+      // Clear the invalid saved request
+      setSavedRequestId(null)
+      localStorage.removeItem(LOCALSTORAGE_KEY)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleDismissSavedRequest = () => {
+    setSavedRequestId(null)
+    localStorage.removeItem(LOCALSTORAGE_KEY)
+  }
+
   // Calculate current stage index for display
-  const currentStageIdx = jobStatus ? STAGES.findIndex(s => s.key === jobStatus.status) : -1
-  const isFailed = jobStatus?.status === 'failed'
+  const currentStageIdx = getStageIndex(jobStatus?.status)
+  const isFailed = isStatusFailed(jobStatus?.status)
   const isCompleted = isStatusComplete(jobStatus?.status)
 
   return (
@@ -708,6 +815,54 @@ export function ETMapAnalysis() {
         )}
       </div>
 
+      {/* Resume Previous Request Prompt */}
+      {savedRequestId && !requestId && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <Clock className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Previous Request Found
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                You have an unfinished ET Map request. Would you like to load its status?
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 break-all">
+                ID: {savedRequestId}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleLoadSavedRequest}
+              disabled={isRefreshing}
+              className="flex-1"
+            >
+              {isRefreshing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Load Status
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDismissSavedRequest}
+              disabled={isRefreshing}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Status Section */}
       {(jobStatus || requestId) && (
         <div className="space-y-4 border-t pt-4">
@@ -719,7 +874,7 @@ export function ETMapAnalysis() {
               onClick={handleClearRequest}
               className="text-xs"
             >
-              Clear
+              Clear Results
             </Button>
           </div>
 
@@ -852,13 +1007,13 @@ export function ETMapAnalysis() {
                         <div className={cn(
                           "text-xs mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded",
                           isStatusComplete(entry.status) && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-                          entry.status === 'failed' && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-                          !isStatusComplete(entry.status) && entry.status !== 'failed' && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          isStatusFailed(entry.status) && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+                          !isStatusComplete(entry.status) && !isStatusFailed(entry.status) && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                         )}>
                           {isStatusComplete(entry.status) && <CheckCircle className="h-3 w-3" />}
-                          {entry.status === 'failed' && <XCircle className="h-3 w-3" />}
-                          {!isStatusComplete(entry.status) && entry.status !== 'failed' && <Clock className="h-3 w-3" />}
-                          {isStatusComplete(entry.status) ? 'Completed' : entry.status === 'failed' ? 'Failed' : 'Processing'}
+                          {isStatusFailed(entry.status) && <XCircle className="h-3 w-3" />}
+                          {!isStatusComplete(entry.status) && !isStatusFailed(entry.status) && <Clock className="h-3 w-3" />}
+                          {isStatusComplete(entry.status) ? 'Completed' : isStatusFailed(entry.status) ? 'Failed' : 'Processing'}
                         </div>
                       )}
                     </div>
@@ -890,6 +1045,40 @@ export function ETMapAnalysis() {
           <strong>Note:</strong> Processing may take several minutes depending on the area size and date range.
         </p>
       </div>
+
+      {/* Date Range Warning Dialog */}
+      {showDateRangeWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border rounded-lg shadow-lg p-6 max-w-md mx-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-6 w-6 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-foreground text-lg">Processing Time Notice</h3>
+                <p className="text-muted-foreground mt-2">
+                  You have selected a date range of <strong>{calculateTotalDays()} days</strong>.
+                  Processing may take several minutes to complete.
+                </p>
+                <p className="text-muted-foreground mt-2">
+                  Please check back after some time for results.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowDateRangeWarning(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={submitETMapRequest}
+              >
+                Ok, I'll Wait
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

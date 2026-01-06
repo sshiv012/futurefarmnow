@@ -261,16 +261,29 @@ export function SamplePoints() {
               <Target className="h-5 w-5 mr-2 text-green-600" />
               Your Soil Sampling Locations
             </h3>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportPoints}
-              title="Download coordinates as CSV file for GPS device"
-              data-tutorial="export-gps-button"
-            >
-              <Download className="h-4 w-4 mr-1" />
-              Download for GPS
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportPoints}
+                title="Download coordinates as CSV file for GPS device"
+                data-tutorial="export-gps-button"
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Download for GPS
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setResults(null)
+                  setSamplePoints(null)
+                }}
+                title="Clear sampling results"
+              >
+                Clear Results
+              </Button>
+            </div>
           </div>
 
           <div className="bg-blue-50 dark:bg-blue-950/30 p-4 rounded-lg border-l-4 border-blue-400">

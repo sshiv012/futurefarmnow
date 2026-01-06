@@ -762,7 +762,6 @@ export function NDVIAnalysis() {
                 className="w-full"
                 style={{ height: '40px', padding: '8px 12px', fontSize: '14px', lineHeight: '20px' }}
               >
-                <SelectOption value="sentinel">Sentinel-2 (OLD)</SelectOption>
                 <SelectOption value="ndvi">Sentinel-2</SelectOption>
                 <SelectOption value="landsat">Landsat 8/9</SelectOption>
               </Select>
@@ -1079,31 +1078,16 @@ export function NDVIAnalysis() {
           <div className="bg-card border rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-medium text-foreground">Daily Health Scores</h4>
-              <div className="flex gap-1">
-                <Button
-                  onClick={handleExportCSV}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                  disabled={!results || results.length === 0}
-                >
-                  <Download className="h-3 w-3 mr-1" />
-                  CSV
-                </Button>
-                <Button
-                  onClick={() => {
-                    setResults(null)
-                    setComparisonResults(null)
-                    setFarmlandResults(null)
-                    setIsComparison(false)
-                  }}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
-                >
-                  Clear
-                </Button>
-              </div>
+              <Button
+                onClick={handleExportCSV}
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                disabled={!results || results.length === 0}
+              >
+                <Download className="h-3 w-3 mr-1" />
+                CSV
+              </Button>
             </div>
             <div className="max-h-48 overflow-y-auto border rounded">
               <table className="w-full text-sm">

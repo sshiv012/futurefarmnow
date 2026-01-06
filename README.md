@@ -14,7 +14,7 @@ This project combines California farmland vector data and satellite soil salinit
 ### Dependencies
 
 The soil salinity backend relies upon Java 1.8.0 and Scala 2.12.7.
-For the Python part, you need Python 3.11 or later.
+For the Python part, you need Python 3.11 or later. You will need conda for environment management.
 You also need gdal.
 
 ### Setup
@@ -24,23 +24,135 @@ The data directory should be organized as follows:
 
 ![data directory](doc/images/directory_organization.png)
 
+### ETMap dataset configuration
+
+The ET Map functionality depends on several external datasets (NLDAS, elevation, land cover, soil). Before starting any WSGI or worker processes, configure these datasets and paths.
+
+#### Configure base paths
+
+All paths are centralized in `wsgi/app/et_map/etmap_modules/config.py`. By default they resolve relative to the repository root `REPO_ROOT`. If you deploy under a different root, adjust only here:
+
+```python
+DB_PATH        = os.path.join(REPO_ROOT, "etmap.db")
+DATA_BASE_PATH = os.path.join(REPO_ROOT, "etmap_data")
+RESULTS_BASE_PATH    = os.path.join(REPO_ROOT, "results")
+```
+
+Please ensure these configured directories have sufficient permissions for worker and API processes to modify them.
+
+*Note*: `raw_data_modules.RawDataConfig` delegates to `ETMapConfig`. Configure paths only once in `etmap_modules/config.py`.
+
+#### NLDAS
+
+1. Login to `https://urs.earthdata.nasa.gov/home`.
+2. Go to **Applications → Authorised Apps** and approve **NASA GESDISC DATA ARCHIVE**.
+
+In a terminal:
+
+```shell
+printf "machine urs.earthdata.nasa.gov login <USER> password <PASS>\n" > ~/.netrc
+chmod 600 ~/.netrc
+touch ~/.urs_cookies
+printf "HTTP.COOKIEJAR=$HOME/.urs_cookies\nHTTP.NETRC=$HOME/.netrc\n" > ~/.dodsrc
+```
+
+If issues occur, try adding:
+
+```shell
+export NETRC=$HOME/.netrc
+```
+
+#### Elevation
+
+1. Go to `https://landfire.gov/topographic/elevation`.
+2. Select **CONUS**.
+3. Filter **Theme** as **Topographic**.
+4. Download elevation data under the **Elevation – ELEV** section.
+
+Folder structure:
+
+```text
+etmap_data/LF2020_Elev_220_CONUS/Tif/LC20_Elev_220.tif
+```
+
+#### NLCD
+
+Go to `https://www.sciencebase.gov/catalog/item/6810c1a4d4be022940554075` and download the desired year NLCD data.
+
+Folder structure:
+
+```text
+etmap_data/NLCD/Annual_NLCD_LndCov_{YEAR}_CU_C1V1/Annual_NLCD_LndCov_{YEAR}_CU_C1V1.tif
+```
+
+Examples:
+
+- 2019:
+
+  ```text
+  etmap_data/NLCD/Annual_NLCD_LndCov_2019_CU_C1V1/Annual_NLCD_LndCov_2019_CU_C1V1.tif
+  ```
+
+- 2024:
+
+  ```text
+  etmap_data/NLCD/Annual_NLCD_LndCov_2024_CU_C1V1/Annual_NLCD_LndCov_2024_CU_C1V1.tif
+  ```
+
+Configuration update after downloading:
+
+1. Open `wsgi/app/et_map/etmap_modules/config.py`.
+2. Find the line `AVAILABLE_NLCD_YEARS = [2019, 2024]`.
+3. Add your downloaded year to the list.
+
+Example: if you download 2023 NLCD data, extract to:
+
+```text
+etmap_data/NLCD/Annual_NLCD_LndCov_2023_CU_C1V1/Annual_NLCD_LndCov_2023_CU_C1V1.tif
+```
+
+Then update config:
+
+```python
+AVAILABLE_NLCD_YEARS = [2019, 2024, 2023]
+```
+
+*Note*: You must update the config file each time you add new NLCD data, otherwise the system will not recognize the new year and will fall back to the closest available year.
+
+#### SSURGO
+
+1. Go to `https://www.sciencebase.gov/catalog/item/5fd7c19cd34e30b9123cb51f`.
+2. Navigate to **Attached Files** and download `awc_gNATSGO.zip` and `fc_gNATSGO.zip`.
+
+Folder structure:
+
+```text
+etmap_data/Soil_Data/awc_gNATSGO_US.tif
+etmap_data/Soil_Data/fc_gNATSGO_US.tif
+```
+
 ### Run in development
 To run the server in development mode, run the class "`edu.ucr.cs.bdlab.beast.operations.Main`" with command line
 argument `server -enableStaticFileHandling`. Open your browser and navigate to
 (http://localhost:8890/public_html/index.html).
 
-For the Python part, you need to create a virtual environment and run a [Flask](https://flask.palletsprojects.com) server on it.
+For the Python part, you should use a Conda/Mamba environment defined in `wsgi/environment.yml` and run a [Flask](https://flask.palletsprojects.com) server on it.
 ```shell
-# Create a virtual environment
-python3 -m venv ffnenv
-# Activate the virtual environment
-source ffnenv/bin/activate # or ffn-env\Scripts\activate
-# Install required packages in the virtual environment
-pip install pandas numpy geopandas shapely pyproj rasterio scikit-learn scipy pysal esda libpysal pyDOE3 pykrige tqdm flask gdal
+# Create a Conda/Mamba environment from the provided specification
+# (this will create an environment named "ffnenv")
+conda env create -f wsgi/environment.yml
+# or, with mamba
+# mamba env create -f wsgi/environment.yml
+
+# Activate the environment
+conda activate ffnenv
+# or
+# mamba activate ffnenv
+
 # Start a Python server that runs the WSGI scripts
 flask --debug --app wsgi/server.py run
-# When you're done, deactivate the virtual environment
-deactivate
+# When you're done, deactivate the environment
+conda deactivate
 ```
 
 To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soil_sample.html)
@@ -57,15 +169,21 @@ To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soi
     sudo chown user:www-data /var/www/ffn.example.com
     ```
    This creates a directory and assign your `user` as the owner and `www-data`, i.e., Apache, as the group.
-3. Create a Python virtual environment in that directory to use for the Python server.
+3. Create a Python environment in that directory to use for the Python server based on the provided Conda environment specification.
     ```shell
     cd /var/www/ffn.example.com
-    # Create a virtual environment
-    python3 -m venv ffnenv
-    # Activate the virtual environment
-    source ffnenv/bin/activate
-    # Install required packages in the virtual environment
-    pip install pandas numpy geopandas shapely pyproj rasterio scikit-learn scipy pysal esda libpysal pyDOE3 pykrige tqdm flask osgeo
+    # Copy the environment specification
+    cp /path/to/local/checkout/wsgi/environment.yml wsgi/environment.yml
+
+    # Create the Conda/Mamba environment (this will create an environment named "ffnenv")
+    conda env create -f wsgi/environment.yml
+    # or, with mamba
+    # mamba env create -f wsgi/environment.yml
+
+    # Activate the environment
+    conda activate ffnenv
+    # or
+    # mamba activate ffnenv
     ```
 4. Copy the static HTML files and code to the server.
     ```shell
@@ -105,7 +223,7 @@ To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soi
       ```
 
 6. Start the WSGI server.
-    1. In the directory `/var/www/ffn.example.com` where you have the virtual environment, install the required module.
+    1. In the directory `/var/www/ffn.example.com` where you have the Python environment, install the required module.
         ```shell
         pip install mod_wsgi
         sudo mod_wsgi-express install # or mod_wsgi-express module-config > /etc/httpd/conf.modules.d/10-wsgi.conf
@@ -195,12 +313,53 @@ To test soil sample function, navigate to (http://127.0.0.1:5000/public_html/soi
       [Install]
       WantedBy=multi-user.target
       ```
+
+      Example systemd unit using Gunicorn (alternative to `mod_wsgi-express`):
+
+      ```ini
+      [Unit]
+      Description=FutureFarmNow WSGI server (Gunicorn)
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=your_user
+      Group=your_group
+      WorkingDirectory=/path/to/server
+      Environment="PATH=/path/to/miniconda/envs/ffnenv/bin"
+      ExecStart=/path/to/miniconda/envs/ffnenv/bin/gunicorn \
+          --workers 4 \
+          --threads 15 \
+          --bind 127.0.0.1:8082 \
+          --access-logfile wsgilog/access.log \
+          --error-logfile wsgilog/error.log \
+          wsgi.wsgi:application
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+      ```
    3. Install the new service, enable, and start it.
       ```shell
       sudo systemctl daemon-reload # Install the service
       sudo systemctl enable ffn-java ffn-wsgi
       sudo systemctl start ffn-java ffn-wsgi
       ```
+
+9. Optional: Configure an ET Map worker process. Required for ETMap feature. 
+
+   The ET Map algorithm fetches and processes multiple datasets (e.g., NLDAS, Landsat, PRISM) in the background. For production deployments, you should run a separate long-lived worker process that continuously polls for ET Map jobs and performs the heavy processing work.
+
+   - **User/Group**: Set the `User` and `Group` to an account with access to your data and environment.
+   - **WorkingDirectory**: Point to the directory where your WSGI application and data live (for example, `/var/www/sites/ffn.example.com`).
+   - **Environment**: Ensure that your worker process activates the same Conda/Mamba environment defined by `wsgi/environment.yml` (e.g., by sourcing `conda.sh` and calling `conda activate ffnenv` before running `python -m wsgi.app.et_map.worker`).
+   - **Cloud vs. on‑prem**: On cloud platforms, you can model the same behavior with a containerized worker (e.g., a long‑running Kubernetes Deployment, ECS service, or similar) that runs the ET worker module on startup. On on‑premise servers, a systemd service or equivalent init system is recommended.
+
+   The important requirement is that the worker process:
+
+   - Runs under a properly configured Python environment created from `wsgi/environment.yml`.
+   - Has access to the same data directories as the WSGI/API server.
+   - Is configured to restart on failure according to your operational policies.
 
 ## Client Deployment (Next.js Application)
 

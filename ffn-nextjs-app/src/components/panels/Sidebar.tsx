@@ -181,16 +181,16 @@ export function Sidebar({ onClose, onShowHelp, onClearAnalysis, onStartTutorial 
                 </Button>
               )}
 
-              {/* Clear Analysis Button */}
+              {/* Clear All Button - clears both results AND selected area */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={onClearAnalysis}
                 className="text-xs px-2 py-1 h-7"
-                title="Clear Analysis"
+                title="Clear all results and selected area"
               >
                 <Trash2 className="h-3 w-3 sm:mr-1" />
-                <span className="hidden sm:inline">Clear</span>
+                <span className="hidden sm:inline">Clear All</span>
               </Button>
             </div>
           </div>

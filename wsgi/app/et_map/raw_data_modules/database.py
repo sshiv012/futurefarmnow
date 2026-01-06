@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+from datetime import datetime, timezone
 from .config import RawDataConfig
 
 class RawDataDatabase:
@@ -75,24 +76,62 @@ class RawDataDatabase:
         return cursor.fetchone()
     
     def claim_pending_job(self):
-      """Atomically claim a pending job to prevent race conditions"""
-      with self.get_connection() as conn:
-          cursor = conn.cursor()
+        """Atomically claim a pending job to prevent race conditions.
 
-          # SQLite doesn't have SELECT FOR UPDATE, use a transaction
-          cursor.execute("""
-              UPDATE etmap_requests 
-              SET status = 'claimed', updated_at = ?
-              WHERE request_id = (
-                  SELECT request_id FROM etmap_requests 
-                  WHERE status = 'pending'
-                  ORDER BY created_at ASC
-                  LIMIT 1
-              )
-              RETURNING *
-          """, (datetime.now().isoformat(),))
+        Returns the job dict with keys: request_id, date_from, date_to, geometry,
+        status, request_json, created_at, updated_at, error_message
+        """
+        connection = self._get_connection()
+        cursor = connection.cursor()
 
-          row = cursor.fetchone()
-          conn.commit()
+        # First, find the oldest pending job
+        cursor.execute("""
+            SELECT request_id FROM etmap_jobs
+            WHERE status = 'queued'
+            ORDER BY created_at ASC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
 
-          return dict(row) if row else None
+        if not row:
+            return None
+
+        request_id = row[0]
+        updated_at = datetime.now(timezone.utc).isoformat()
+
+        # Claim it by updating status to 'claimed'
+        cursor.execute("""
+            UPDATE etmap_jobs
+            SET status = 'claimed', updated_at = ?
+            WHERE request_id = ? AND status = 'queued'
+        """, (updated_at, request_id))
+
+        if cursor.rowcount == 0:
+            # Another worker claimed it first
+            connection.commit()
+            return None
+
+        # Fetch the full job data
+        cursor.execute("""
+            SELECT request_id, date_from, date_to, geometry, status,
+                   request_json, created_at, updated_at, error_message
+            FROM etmap_jobs
+            WHERE request_id = ?
+        """, (request_id,))
+
+        job_row = cursor.fetchone()
+        connection.commit()
+
+        if job_row:
+            return {
+                'request_id': job_row[0],
+                'date_from': job_row[1],
+                'date_to': job_row[2],
+                'geometry': job_row[3],
+                'status': job_row[4],
+                'request_json': job_row[5],
+                'created_at': job_row[6],
+                'updated_at': job_row[7],
+                'error_message': job_row[8]
+            }
+        return None
