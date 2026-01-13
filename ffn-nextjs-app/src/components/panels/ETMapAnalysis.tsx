@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { apiClient } from '@/lib/api/client'
-import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2, BarChart3 } from 'lucide-react'
+import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2, BarChart3, Share2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { GeoJSONGeometry, ETMapStatusResponse, ETMapStatus } from '@/lib/types/api'
 import { cn } from '@/lib/utils'
@@ -217,6 +217,17 @@ export function ETMapAnalysis() {
   // Load history on mount
   useEffect(() => {
     setHistory(loadHistory())
+  }, [])
+
+  // Check for shared ETMap link on mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const sharedEtmapId = urlParams.get('etmapId')
+
+    if (sharedEtmapId && !requestId && !savedRequestId) {
+      loadSharedRequest(sharedEtmapId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Keep currentGeometryRef in sync with drawnPolygons
@@ -767,6 +778,116 @@ export function ETMapAnalysis() {
     localStorage.removeItem(LOCALSTORAGE_KEY)
   }
 
+  const loadSharedRequest = async (sharedId: string) => {
+    setIsRefreshing(true)
+    try {
+      const status = await apiClient.getETMapStatus(sharedId)
+      setJobStatus(status)
+      setRequestId(sharedId)
+      setETMapRequestId(sharedId)
+
+      // Restore geometry from backend response (cross-device compatible)
+      if (status.request?.geometry) {
+        const geometry = status.request.geometry
+        const geometries: GeoJSONGeometry[] = geometry.type === 'MultiPolygon'
+          ? (geometry.coordinates as number[][][][]).map(coords => ({ type: 'Polygon' as const, coordinates: coords }))
+          : [geometry]
+
+        currentGeometryRef.current = geometries
+        setDrawnPolygons(geometries)
+
+        // Draw on map
+        if (drawnItems) {
+          drawnItems.clearLayers()
+          const L = (await import('leaflet')).default
+          geometries.forEach(geom => {
+            if (geom.coordinates && geom.coordinates[0]) {
+              const coords = geom.coordinates[0] as [number, number][]
+              const latLngs = coords.map(([lng, lat]) => [lat, lng] as [number, number])
+              const polygon = L.polygon(latLngs, { color: '#3388ff', weight: 2, fillOpacity: 0.2 })
+              drawnItems.addLayer(polygon)
+            }
+          })
+        }
+
+        // Update date range
+        if (status.request.date_from && status.request.date_to) {
+          setSelectedDateRange({ from: status.request.date_from, to: status.request.date_to })
+        }
+
+        // Zoom to geometry
+        if (mapInstance && geometries.length > 0) {
+          const bounds = calculateMultiPolygonBounds(geometries)
+          if (bounds) {
+            setTimeout(() => {
+              try {
+                mapInstance.fitBounds(bounds, { padding: [50, 50] })
+              } catch (e) {
+                console.warn('Map not ready:', e)
+              }
+            }, 100)
+          }
+        }
+      }
+
+      // Load image if complete
+      if (isStatusComplete(status.status)) {
+        try {
+          const imageBlob = await apiClient.getETMapImage(sharedId)
+          const imageUrl = URL.createObjectURL(imageBlob)
+          const bounds = calculateMultiPolygonBounds(currentGeometryRef.current)
+          if (bounds) {
+            setETMapImageOverlay(imageUrl, bounds)
+          }
+          toast.success('Shared ET Map loaded!')
+        } catch (imgError) {
+          console.error('Failed to load ET Map image:', imgError)
+        }
+      } else if (isStatusFailed(status.status)) {
+        toast.error(status.error_message || 'This ET Map request failed')
+      } else {
+        toast.success('Loading shared request - still processing...')
+      }
+    } catch (error: any) {
+      console.error('Failed to load shared request:', error)
+      toast.error('Failed to load shared ET Map')
+      // Clear invalid param from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('etmapId')
+      window.history.replaceState({}, '', url.toString())
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleShare = async () => {
+    if (!requestId) return
+
+    const url = new URL(window.location.origin)
+    url.searchParams.set('tab', 'etmap')
+    url.searchParams.set('etmapId', requestId)
+
+    // Include map position for proper zoom on shared link
+    if (mapInstance) {
+      const center = mapInstance.getCenter()
+      const zoom = mapInstance.getZoom()
+      url.searchParams.set('lat', center.lat.toFixed(6))
+      url.searchParams.set('lng', center.lng.toFixed(6))
+      url.searchParams.set('zoom', zoom.toString())
+    }
+
+    // Include date range
+    url.searchParams.set('dateFrom', selectedDateRange.from)
+    url.searchParams.set('dateTo', selectedDateRange.to)
+
+    try {
+      await navigator.clipboard.writeText(url.toString())
+      toast.success('Share link copied to clipboard!')
+    } catch {
+      toast.error('Failed to copy link')
+    }
+  }
+
   // Calculate current stage index for display
   const currentStageIdx = getStageIndex(jobStatus?.status)
   const isFailed = isStatusFailed(jobStatus?.status)
@@ -1067,6 +1188,16 @@ export function ETMapAnalysis() {
             >
               <RefreshCw className={cn("h-4 w-4 mr-2", isRefreshing && "animate-spin")} />
               Refresh
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShare}
+              disabled={!requestId}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share
             </Button>
 
             <Button

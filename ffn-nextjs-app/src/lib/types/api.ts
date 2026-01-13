@@ -164,6 +164,11 @@ export interface ETMapStatusResponse {
   result_url?: string
   created_at?: string
   updated_at?: string
+  request?: {  // Original request data (for shared link restoration)
+    geometry: GeoJSONGeometry
+    date_from: string
+    date_to: string
+  }
   statistics?: ETMapStatistics  // TIF file statistics (available when calculation_complete)
 }
 
