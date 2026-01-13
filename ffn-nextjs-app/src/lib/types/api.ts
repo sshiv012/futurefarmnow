@@ -142,6 +142,19 @@ export type ETMapStatus =
   | 'calculation_failed'  // ET calculation failed
   | 'failed'              // General failure
 
+// ET Map TIF statistics (frontend-friendly format)
+export interface ETMapStatistics {
+  band_name: string
+  min: number
+  max: number
+  mean: number
+  median: number
+  std: number
+  valid_pixels: number
+  total_pixels: number
+  coverage_percent: number
+}
+
 export interface ETMapStatusResponse {
   request_id: string
   status: ETMapStatus
@@ -151,6 +164,7 @@ export interface ETMapStatusResponse {
   result_url?: string
   created_at?: string
   updated_at?: string
+  statistics?: ETMapStatistics  // TIF file statistics (available when calculation_complete)
 }
 
 export interface ETMapSubmitParams {

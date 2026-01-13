@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { apiClient } from '@/lib/api/client'
-import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { AlertCircle, RefreshCw, Droplets, CheckCircle, Clock, XCircle, Download, History, ChevronDown, ChevronUp, Trash2, BarChart3 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { GeoJSONGeometry, ETMapStatusResponse, ETMapStatus } from '@/lib/types/api'
 import { cn } from '@/lib/utils'
@@ -204,6 +204,7 @@ export function ETMapAnalysis() {
   const [requestId, setRequestId] = useState<string | null>(null)
   const [history, setHistory] = useState<ETMapHistoryEntry[]>([])
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false)
+  const [isStatusExpanded, setIsStatusExpanded] = useState(false) // Collapsed by default
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null)
   const [savedRequestId, setSavedRequestId] = useState<string | null>(null) // Saved but not yet loaded
   const [showDateRangeWarning, setShowDateRangeWarning] = useState(false) // Confirmation dialog for long date ranges
@@ -678,11 +679,58 @@ export function ETMapAnalysis() {
       setETMapRequestId(savedRequestId)
       setSavedRequestId(null) // Clear the saved state since it's now active
 
-      // Try to find geometry from history
+      // Try to find geometry from history and restore map state
       const historyEntry = history.find(h => h.requestId === savedRequestId)
       if (historyEntry) {
         currentGeometryRef.current = historyEntry.geometry
         setSelectedHistoryId(savedRequestId)
+
+        // Draw the geometry on the map (same as handleSelectHistoryEntry)
+        if (drawnItems) {
+          drawnItems.clearLayers()
+
+          // Dynamically import Leaflet (only runs on client)
+          const L = (await import('leaflet')).default
+
+          // Draw the geometry from history
+          historyEntry.geometry.forEach(geom => {
+            if (geom.coordinates && geom.coordinates[0]) {
+              const coords = geom.coordinates[0] as [number, number][]
+              // Convert [lng, lat] to [lat, lng] for Leaflet
+              const latLngs = coords.map(([lng, lat]) => [lat, lng] as [number, number])
+              const polygon = L.polygon(latLngs, {
+                color: '#3388ff',
+                weight: 2,
+                fillOpacity: 0.2
+              })
+              drawnItems.addLayer(polygon)
+            }
+          })
+        }
+
+        // Update store with the geometry
+        setDrawnPolygons(historyEntry.geometry)
+
+        // Update date range
+        setSelectedDateRange({
+          from: historyEntry.dateFrom,
+          to: historyEntry.dateTo
+        })
+
+        // Zoom to the geometry (with safety check for map readiness)
+        if (mapInstance && historyEntry.geometry.length > 0) {
+          const bounds = calculateMultiPolygonBounds(historyEntry.geometry)
+          if (bounds) {
+            // Use setTimeout to ensure map is fully ready
+            setTimeout(() => {
+              try {
+                mapInstance.fitBounds(bounds, { padding: [50, 50] })
+              } catch (e) {
+                console.warn('Map not ready for fitBounds:', e)
+              }
+            }, 100)
+          }
+        }
       }
 
       // If completed, load the image
@@ -863,61 +911,149 @@ export function ETMapAnalysis() {
         </div>
       )}
 
-      {/* Status Section */}
+      {/* Status Section - Collapsible */}
       {(jobStatus || requestId) && (
         <div className="space-y-4 border-t pt-4">
-          <div className="flex items-center justify-between">
-            <h4 className="font-medium text-foreground">Processing Status</h4>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClearRequest}
-              className="text-xs"
-            >
-              Clear Results
-            </Button>
-          </div>
+          {/* Collapsible Header */}
+          <button
+            onClick={() => setIsStatusExpanded(!isStatusExpanded)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <div className="flex items-center gap-3 flex-1">
+              <h4 className="font-medium text-foreground">Processing Status</h4>
+              {/* Current status badge (always visible) */}
+              <div className={cn(
+                "flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium",
+                isCompleted && "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+                isFailed && "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+                !isCompleted && !isFailed && "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+              )}>
+                {isCompleted && <CheckCircle className="h-3 w-3" />}
+                {isFailed && <XCircle className="h-3 w-3" />}
+                {!isCompleted && !isFailed && (
+                  <div className="h-3 w-3 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+                )}
+                <span>
+                  {isCompleted ? 'Completed' : isFailed ? 'Failed' : STAGES[currentStageIdx]?.label || 'Processing'}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleClearRequest()
+                }}
+                className="text-xs"
+              >
+                Clear
+              </Button>
+              {isStatusExpanded ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </button>
 
-          {/* Stage indicators */}
-          <div className="space-y-1">
-            {STAGES.map((stage, idx) => {
-              const isPast = idx < currentStageIdx || isCompleted
-              const isCurrent = idx === currentStageIdx && !isCompleted
-              const isFuture = idx > currentStageIdx && !isCompleted
-              const isCompletedStage = stage.key === 'calculation_complete' && isCompleted
+          {/* Expanded Content */}
+          {isStatusExpanded && (
+            <>
+              {/* Stage indicators */}
+              <div className="space-y-1">
+                {STAGES.map((stage, idx) => {
+                  const isPast = idx < currentStageIdx || isCompleted
+                  const isCurrent = idx === currentStageIdx && !isCompleted
+                  const isFuture = idx > currentStageIdx && !isCompleted
+                  const isCompletedStage = stage.key === 'calculation_complete' && isCompleted
 
-              return (
-                <div
-                  key={stage.key}
-                  className={cn(
-                    "flex items-center gap-3 p-2.5 rounded-lg text-sm transition-all duration-200",
-                    isCurrent && !isFailed && "bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200 border-2 border-blue-400 dark:border-blue-500 shadow-md",
-                    isPast && !isCompletedStage && "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20",
-                    isCompletedStage && "bg-green-100 dark:bg-green-900/40 font-semibold text-green-700 dark:text-green-300 border-2 border-green-400 dark:border-green-500",
-                    isFuture && "text-muted-foreground opacity-40",
-                    isFailed && isCurrent && "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-2 border-red-400 font-semibold"
-                  )}
-                >
-                  {isPast && !isCompletedStage && <CheckCircle className="h-5 w-5 text-green-500" />}
-                  {isCompletedStage && <CheckCircle className="h-5 w-5 text-green-500 animate-bounce" />}
-                  {isCurrent && !isFailed && (
-                    <div className="h-5 w-5 border-2 border-blue-300 dark:border-blue-600 border-t-blue-600 dark:border-t-blue-300 rounded-full animate-spin" />
-                  )}
-                  {isCurrent && isFailed && <XCircle className="h-5 w-5 text-red-500" />}
-                  {isFuture && <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />}
-                  <span>{stage.label}</span>
-                  {isCurrent && !isFailed && (
-                    <span className="ml-auto text-xs text-blue-600 dark:text-blue-300 font-normal">In Progress...</span>
-                  )}
+                  return (
+                    <div
+                      key={stage.key}
+                      className={cn(
+                        "flex items-center gap-3 p-2.5 rounded-lg text-sm transition-all duration-200",
+                        isCurrent && !isFailed && "bg-blue-100 dark:bg-blue-900/50 font-semibold text-blue-800 dark:text-blue-200 border-2 border-blue-400 dark:border-blue-500 shadow-md",
+                        isPast && !isCompletedStage && "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20",
+                        isCompletedStage && "bg-green-100 dark:bg-green-900/40 font-semibold text-green-700 dark:text-green-300 border-2 border-green-400 dark:border-green-500",
+                        isFuture && "text-muted-foreground opacity-40",
+                        isFailed && isCurrent && "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-2 border-red-400 font-semibold"
+                      )}
+                    >
+                      {isPast && !isCompletedStage && <CheckCircle className="h-5 w-5 text-green-500" />}
+                      {isCompletedStage && <CheckCircle className="h-5 w-5 text-green-500 animate-bounce" />}
+                      {isCurrent && !isFailed && (
+                        <div className="h-5 w-5 border-2 border-blue-300 dark:border-blue-600 border-t-blue-600 dark:border-t-blue-300 rounded-full animate-spin" />
+                      )}
+                      {isCurrent && isFailed && <XCircle className="h-5 w-5 text-red-500" />}
+                      {isFuture && <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30" />}
+                      <span>{stage.label}</span>
+                      {isCurrent && !isFailed && (
+                        <span className="ml-auto text-xs text-blue-600 dark:text-blue-300 font-normal">In Progress...</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Error message */}
+              {isFailed && jobStatus?.message && (
+                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded">
+                  {jobStatus.message}
                 </div>
-              )
-            })}
-          </div>
+              )}
 
-          {/* Error message */}
-          {isFailed && jobStatus?.message && (
-            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded">
-              {jobStatus.message}
+              {/* Request ID */}
+              {requestId && (
+                <div className="text-xs text-muted-foreground">
+                  Request ID: {requestId}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Statistics Section - Always visible when completed */}
+          {isCompleted && jobStatus?.statistics && (
+            <div className="bg-muted/30 rounded-lg p-4 border">
+              <h5 className="font-medium text-foreground flex items-center gap-2 mb-3">
+                <BarChart3 className="h-4 w-4" />
+                ET Map Statistics
+              </h5>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Band:</span>
+                  <span className="font-medium">{jobStatus.statistics.band_name ?? 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Coverage:</span>
+                  <span className="font-medium">{jobStatus.statistics.coverage_percent != null ? jobStatus.statistics.coverage_percent.toFixed(2) : 'N/A'}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Min:</span>
+                  <span className="font-medium">{jobStatus.statistics.min != null ? jobStatus.statistics.min.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Max:</span>
+                  <span className="font-medium">{jobStatus.statistics.max != null ? jobStatus.statistics.max.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mean:</span>
+                  <span className="font-medium">{jobStatus.statistics.mean != null ? jobStatus.statistics.mean.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Median:</span>
+                  <span className="font-medium">{jobStatus.statistics.median != null ? jobStatus.statistics.median.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Std Dev:</span>
+                  <span className="font-medium">{jobStatus.statistics.std != null ? jobStatus.statistics.std.toFixed(2) : 'N/A'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Valid Pixels:</span>
+                  <span className="font-medium">{jobStatus.statistics.valid_pixels != null ? jobStatus.statistics.valid_pixels.toLocaleString() : 'N/A'}</span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -953,13 +1089,6 @@ export function ETMapAnalysis() {
               TIF
             </Button>
           </div>
-
-          {/* Request ID */}
-          {requestId && (
-            <div className="text-xs text-muted-foreground">
-              Request ID: {requestId}
-            </div>
-          )}
         </div>
       )}
 

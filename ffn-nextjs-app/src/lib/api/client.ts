@@ -282,10 +282,27 @@ class APIClient {
    * Get the status of an ETMap request
    */
   async getETMapStatus(requestId: string): Promise<ETMapStatusResponse> {
-    const response: AxiosResponse<ETMapStatusResponse> = await this.client.get(
+    const response: AxiosResponse<any> = await this.client.get(
       `/etmap/${requestId}.json`
     )
-    return response.data
+    const data = response.data
+
+    // Transform backend statistics field names to frontend-friendly format
+    if (data.statistics) {
+      data.statistics = {
+        band_name: data.statistics.band_name,
+        min: data.statistics.min_et_mm_day,
+        max: data.statistics.max_et_mm_day,
+        mean: data.statistics.mean_et_mm_day,
+        median: data.statistics.median_et_mm_day,
+        std: data.statistics.std_et_mm_day,
+        valid_pixels: data.statistics.valid_pixels,
+        total_pixels: data.statistics.total_pixels,
+        coverage_percent: data.statistics.coverage_percent,
+      }
+    }
+
+    return data as ETMapStatusResponse
   }
 
   /**

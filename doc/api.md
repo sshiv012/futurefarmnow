@@ -611,9 +611,34 @@ Check the status of an ET Map request using the request ID.
   },
   "request_id": "ffaf09bf-e712-4d42-a22c-a50554c0a0d6",
   "status": "calculation_complete",
-  "updated_at": "2025-08-30T08:31:38.278548"
+  "updated_at": "2025-08-30T08:31:38.278548",
+  "statistics": {
+    "band_name": "ET (mm/day)",
+    "min_et_mm_day": 0.123,
+    "max_et_mm_day": 8.456,
+    "mean_et_mm_day": 3.789,
+    "median_et_mm_day": 3.654,
+    "std_et_mm_day": 1.234,
+    "valid_pixels": 150000,
+    "total_pixels": 200000,
+    "coverage_percent": 75.0
+  }
 }
 ```
+
+*Note*: The `statistics` field is only included when `status` is `calculation_complete`. It provides summary statistics of the ET raster, allowing researchers to understand the data range before downloading the full GeoTIFF.
+
+| Statistics Field | Description |
+|------------------|-------------|
+| band_name | Name and units of the raster band |
+| min_et_mm_day | Minimum ET value in mm/day |
+| max_et_mm_day | Maximum ET value in mm/day |
+| mean_et_mm_day | Mean ET value in mm/day |
+| median_et_mm_day | Median ET value in mm/day |
+| std_et_mm_day | Standard deviation of ET values |
+| valid_pixels | Number of pixels with valid data |
+| total_pixels | Total number of pixels in the raster |
+| coverage_percent | Percentage of valid pixels |
 
 ## Get ET map image for a region
 

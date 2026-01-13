@@ -62,12 +62,17 @@ class RawDataJobManager:
         updated_at = datetime.utcnow().isoformat()
         self.db.update_job_status(request_id, status.value, updated_at, error_message)
 
+    def update_statistics(self, request_id: str, statistics: dict):
+        """Store TIF file statistics in the database."""
+        statistics_json = json.dumps(statistics)
+        self.db.update_job_statistics(request_id, statistics_json)
+
     def get_job_status(self, request_id: str) -> dict:
         job_data = self.db.get_job(request_id)
         if not job_data:
             return None
 
-        status, created_at, updated_at, request_json, error_message = job_data
+        status, created_at, updated_at, request_json, error_message, statistics_json = job_data
 
         response_data = {
             'request_id': request_id,
@@ -79,5 +84,8 @@ class RawDataJobManager:
 
         if error_message:
             response_data['error_message'] = error_message
+
+        if statistics_json:
+            response_data['statistics'] = json.loads(statistics_json)
 
         return response_data

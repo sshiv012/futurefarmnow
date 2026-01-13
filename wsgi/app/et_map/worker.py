@@ -33,6 +33,7 @@ from app.et_map.raw_data_modules.coverage_checker import SpatialCoverageChecker
 from app.et_map.raw_data_modules.data_fetchers import LandsatFetcher, PRISMFetcher, NLDASFetcher
 from app.et_map.raw_data_modules.fetch_manager import DataFetchManager
 from app.et_map.raw_data_modules.utils import RawDataUtils
+from app.et_map.etmap_modules.config import ETMapConfig
 
 # Configuration
 POLL_INTERVAL = int(os.environ.get('POLL_INTERVAL', 10))
@@ -206,6 +207,8 @@ class ETMapWorker:
 
             if return_code == 0:
                 logger.info(f"Calculation completed successfully for UUID: {request_id}")
+                # Store TIF statistics in database
+                self._store_statistics(request_id)
                 self.job_manager.update_status(request_id, JobStatus.CALCULATION_COMPLETE)
                 return True
             else:
@@ -224,6 +227,31 @@ class ETMapWorker:
             logger.error(f"Failed to run calculation: {e}")
             self.job_manager.update_status(request_id, JobStatus.CALCULATION_FAILED, str(e))
             return False
+
+    def _store_statistics(self, request_id: str):
+        """Read statistics from JSON summary and store in database."""
+        try:
+            output_path = ETMapConfig.get_output_path(request_id)
+            summary_path = os.path.join(output_path, 'et_enhanced', 'ET_comprehensive_summary.json')
+
+            if not os.path.exists(summary_path):
+                logger.warning(f"Statistics summary file not found: {summary_path}")
+                return
+
+            with open(summary_path, 'r') as f:
+                summary = json.load(f)
+
+            if 'statistics' in summary:
+                stats = summary['statistics']
+                # Add band name for researcher context
+                stats['band_name'] = 'ET (mm/day)'
+                self.job_manager.update_statistics(request_id, stats)
+                logger.info(f"Stored TIF statistics for request {request_id}")
+            else:
+                logger.warning(f"No statistics found in summary file: {summary_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to store statistics for {request_id}: {e}")
 
     def run(self):
         """Main worker loop - poll for jobs and process them."""

@@ -28,7 +28,8 @@ class RawDataDatabase:
             request_json TEXT NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            error_message TEXT
+            error_message TEXT,
+            statistics TEXT
         )
         ''')
         connection.commit()
@@ -70,10 +71,20 @@ class RawDataDatabase:
         cursor = connection.cursor()
 
         cursor.execute(
-            'SELECT status, created_at, updated_at, request_json, error_message FROM etmap_jobs WHERE request_id=?',
+            'SELECT status, created_at, updated_at, request_json, error_message, statistics FROM etmap_jobs WHERE request_id=?',
             (request_id,)
         )
         return cursor.fetchone()
+
+    def update_job_statistics(self, request_id: str, statistics_json: str):
+        connection = self._get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            'UPDATE etmap_jobs SET statistics=? WHERE request_id=?',
+            (statistics_json, request_id)
+        )
+        connection.commit()
     
     def claim_pending_job(self):
         """Atomically claim a pending job to prevent race conditions.
