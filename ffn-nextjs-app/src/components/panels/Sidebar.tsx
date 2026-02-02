@@ -2,19 +2,50 @@
 
 import { X, ChevronLeft, ChevronRight, HelpCircle, MapPin, Trash2, Maximize2, Minimize2, BookOpen, Copy, Check } from 'lucide-react'
 import Image from 'next/image'
+import dynamic from 'next/dynamic'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { DatasetSelector } from './DatasetSelector'
-import { SoilAnalysis } from './SoilAnalysis'
-import { NDVIAnalysis } from './NDVIAnalysis'
-import { SamplePoints } from './SamplePoints'
-import { ETMapAnalysis } from './ETMapAnalysis'
 import { useMapStore } from '@/lib/stores/mapStore'
 import { useState } from 'react'
 import { toast } from '@/lib/utils/toast'
 import { cn } from '@/lib/utils'
+import { Loading } from '@/components/common/Loading'
+
+// Dynamic imports for code splitting - only load analysis panels when needed
+// Using named exports with dynamic import wrapper
+const SoilAnalysis = dynamic(
+  () => import('./SoilAnalysis').then(mod => ({ default: mod.SoilAnalysis })),
+  {
+    loading: () => <Loading />,
+    ssr: false
+  }
+)
+
+const NDVIAnalysis = dynamic(
+  () => import('./NDVIAnalysis').then(mod => ({ default: mod.NDVIAnalysis })),
+  {
+    loading: () => <Loading />,
+    ssr: false
+  }
+)
+
+const SamplePoints = dynamic(
+  () => import('./SamplePoints').then(mod => ({ default: mod.SamplePoints })),
+  {
+    loading: () => <Loading />,
+    ssr: false
+  }
+)
+
+const ETMapAnalysis = dynamic(
+  () => import('./ETMapAnalysis').then(mod => ({ default: mod.ETMapAnalysis })),
+  {
+    loading: () => <Loading />,
+    ssr: false
+  }
+)
 
 interface SidebarProps {
   onClose?: () => void

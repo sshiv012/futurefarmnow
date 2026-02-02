@@ -20,7 +20,11 @@ export function TutorialPopup({ step, highlightArea }: TutorialPopupProps) {
     const popupWidth = 360
     const popupHeight = 280
     const margin = 20
-    const sidebarWidth = 384 // 24rem (w-96) default sidebar width
+
+    // Dynamically get sidebar width from the actual sidebar element
+    const sidebarElement = document.querySelector('[data-tutorial="sidebar-controls"]')?.closest('aside')
+      || document.querySelector('aside')
+    const sidebarWidth = sidebarElement ? sidebarElement.getBoundingClientRect().right : 384
 
     if (step.position === 'center') {
       return {
@@ -41,13 +45,13 @@ export function TutorialPopup({ step, highlightArea }: TutorialPopupProps) {
     if (step.position === 'right' || !highlightArea) {
       const mapAreaLeft = sidebarWidth + margin
       const mapAreaWidth = viewportWidth - sidebarWidth - margin * 2
-      
+
       return {
         position: 'fixed' as const,
         top: margin * 2,
-        left: mapAreaLeft,
-        width: Math.min(popupWidth, mapAreaWidth),
-        maxWidth: `${mapAreaWidth}px`,
+        left: Math.max(mapAreaLeft, margin), // Ensure minimum margin from left
+        width: Math.min(popupWidth, Math.max(mapAreaWidth, 200)),
+        maxWidth: `${Math.max(mapAreaWidth, 200)}px`,
         zIndex: 10001
       }
     }

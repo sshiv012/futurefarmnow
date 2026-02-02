@@ -63,6 +63,11 @@
   font-family: inherit;
 }
 
+.dark .leaflet-container,
+.dark .leaflet-tile-pane {
+  background: #2f3338;
+}
+
 .leaflet-control-attribution {
   font-size: 11px;
   background: rgba(255, 255, 255, 0.8);
@@ -94,4 +99,3 @@
 .light-popup .leaflet-popup-tip {
   background-color: white !important;
 }
-

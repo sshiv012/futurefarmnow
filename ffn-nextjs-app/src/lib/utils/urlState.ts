@@ -22,11 +22,11 @@ export function useURLState() {
 
   const getURLState = useCallback((): URLState => {
     const params = new URLSearchParams(searchParams.toString())
-    
+
     return {
       lat: params.get('lat') ? parseFloat(params.get('lat')!) : undefined,
       lng: params.get('lng') ? parseFloat(params.get('lng')!) : undefined,
-      zoom: params.get('zoom') ? parseInt(params.get('zoom')!) : undefined,
+      zoom: params.get('zoom') ? parseFloat(params.get('zoom')!) : undefined,
       dataset: params.get('dataset') || undefined,
       activeTab: (params.get('tab') as 'soil' | 'ndvi' | 'sample') || undefined,
       soilLayer: (params.get('soilLayer') as SoilLayerEnum) || undefined,
@@ -89,19 +89,36 @@ export function useURLState() {
       isUpdatingRef.current = true
       const newURL = `${window.location.pathname}?${currentParams.toString()}`
 
-      // Use requestIdleCallback for better performance
-      if (window.requestIdleCallback) {
-        window.requestIdleCallback(() => {
+      const changedKeys = Object.keys(processedState).filter(key => {
+        const urlKey = key === 'activeTab' ? 'tab' : key
+        const currentValue = new URLSearchParams(searchParams.toString()).get(urlKey)
+        const newValue = processedState[key as keyof URLState]
+        return newValue !== undefined && newValue !== null && currentValue !== newValue?.toString()
+      })
+      const isMapOnlyUpdate = changedKeys.length > 0 && changedKeys.every(key =>
+        ['lat', 'lng', 'zoom'].includes(key)
+      )
+
+      if (isMapOnlyUpdate) {
+        window.history.replaceState({}, '', newURL)
+        setTimeout(() => {
+          isUpdatingRef.current = false
+        }, 50)
+      } else {
+        // Use Next.js router for non-map updates (dataset, tab, etc.)
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(() => {
+            router.replace(newURL, { scroll: false })
+            setTimeout(() => {
+              isUpdatingRef.current = false
+            }, 50)
+          }, { timeout: 100 })
+        } else {
           router.replace(newURL, { scroll: false })
           setTimeout(() => {
             isUpdatingRef.current = false
           }, 50)
-        }, { timeout: 100 })
-      } else {
-        router.replace(newURL, { scroll: false })
-        setTimeout(() => {
-          isUpdatingRef.current = false
-        }, 50)
+        }
       }
     }
 
@@ -109,8 +126,7 @@ export function useURLState() {
     if (options?.immediate || (!('lat' in newState) && !('lng' in newState) && !('zoom' in newState))) {
       performUpdate()
     } else {
-      // Debounce map movement updates by 500ms
-      updateTimeoutRef.current = setTimeout(performUpdate, 500)
+      updateTimeoutRef.current = setTimeout(performUpdate, 1000)
     }
   }, [router, searchParams])
 

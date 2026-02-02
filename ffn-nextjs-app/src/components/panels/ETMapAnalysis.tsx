@@ -894,7 +894,7 @@ export function ETMapAnalysis() {
   const isCompleted = isStatusComplete(jobStatus?.status)
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6" data-tutorial="etmap-panel">
       {/* Parameters Section */}
       <div className="space-y-4">
         <h3 className="font-medium text-foreground flex items-center">
@@ -906,7 +906,7 @@ export function ETMapAnalysis() {
           Calculate evapotranspiration (ET) for your farm area using satellite data and meteorological models.
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4" data-tutorial="etmap-date-selector">
           <div className="flex items-baseline gap-4">
             <label className="text-sm font-medium text-foreground w-20 shrink-0">
               Start Date
@@ -961,6 +961,7 @@ export function ETMapAnalysis() {
           onClick={handleSubmit}
           disabled={!drawnPolygons || drawnPolygons.length === 0 || isSubmitting || calculateAreaSqMiles(drawnPolygons) > MAX_AREA_SQ_MILES}
           className="w-full"
+          data-tutorial="etmap-calculate-button"
         >
           {isSubmitting ? (
             <>
@@ -1034,7 +1035,7 @@ export function ETMapAnalysis() {
 
       {/* Status Section - Collapsible */}
       {(jobStatus || requestId) && (
-        <div className="space-y-4 border-t pt-4">
+        <div className="space-y-4 border-t pt-4" data-tutorial="etmap-status">
           {/* Collapsible Header */}
           <button
             onClick={() => setIsStatusExpanded(!isStatusExpanded)}
@@ -1136,7 +1137,7 @@ export function ETMapAnalysis() {
 
           {/* Statistics Section - Always visible when completed */}
           {isCompleted && jobStatus?.statistics && (
-            <div className="bg-muted/30 rounded-lg p-4 border">
+            <div className="bg-muted/30 rounded-lg p-4 border" data-tutorial="etmap-statistics">
               <h5 className="font-medium text-foreground flex items-center gap-2 mb-3">
                 <BarChart3 className="h-4 w-4" />
                 ET Map Statistics
@@ -1179,7 +1180,7 @@ export function ETMapAnalysis() {
           )}
 
           {/* Action buttons */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap" data-tutorial="etmap-downloads">
             <Button
               variant="outline"
               size="sm"
@@ -1195,6 +1196,7 @@ export function ETMapAnalysis() {
               size="sm"
               onClick={handleShare}
               disabled={!requestId}
+              data-tutorial="etmap-share-button"
             >
               <Share2 className="h-4 w-4 mr-2" />
               Share
@@ -1225,7 +1227,7 @@ export function ETMapAnalysis() {
 
       {/* History Section */}
       {history.length > 0 && (
-        <div className="border-t pt-4">
+        <div className="border-t pt-4" data-tutorial="etmap-history">
           <button
             onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
             className="flex items-center justify-between w-full text-left"

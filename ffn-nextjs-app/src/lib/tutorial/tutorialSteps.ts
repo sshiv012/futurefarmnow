@@ -10,7 +10,7 @@ export interface TutorialStep {
   skipEnabled?: boolean
   autoAction?: {
     type: 'switchTab'
-    value: 'soil' | 'ndvi' | 'sample'
+    value: 'soil' | 'ndvi' | 'sample' | 'etmap'
   }
 }
 
@@ -27,7 +27,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'sidebar-controls',
-    title: 'Sidebar Controls 🎛️',
+    title: 'Sidebar Controls',
     content: 'These buttons let you control the sidebar: collapse it to see more map, expand it for more space, and toggle between light/dark themes for comfortable viewing.',
     targetSelector: '[data-tutorial="sidebar-controls"]',
     position: 'right',
@@ -36,7 +36,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'map-overview',
-    title: 'Your Farm Map 🗺️',
+    title: 'Your Farm Map',
     content: 'This is your interactive farm map. You can zoom in, zoom out, and pan around to see different areas. The map shows farmland boundaries and satellite imagery.',
     targetSelector: '[data-tutorial="map-container"]',
     position: 'right',
@@ -46,7 +46,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'dataset-selector',
-    title: 'Choose Your Region 📍',
+    title: 'Choose Your Region',
     content: 'Select your farming region here. Currently, we support California and Arizona farmlands. Choose the one that matches your farm location.',
     targetSelector: '[data-tutorial="dataset-selector"]',
     position: 'right',
@@ -56,7 +56,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'drawing-tools',
-    title: 'Draw Your Farm Area ✏️',
+    title: 'Draw Your Farm Area',
     content: 'Use these drawing tools to outline your specific farm area on the map. You can see polygon and rectangle tools here.',
     targetSelector: '.leaflet-draw-toolbar',
     position: 'right',
@@ -66,7 +66,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'polygon-tool',
-    title: 'Polygon Drawing Tool 📐',
+    title: 'Polygon Drawing Tool',
     content: 'Click this polygon tool to start drawing an irregular shape around your farm. After clicking, you can click points on the map to create your farm boundary.',
     targetSelector: '.leaflet-draw-draw-polygon',
     position: 'right',
@@ -76,7 +76,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'edit-tool',
-    title: 'Edit Your Farm Area ✏️',
+    title: 'Edit Your Farm Area',
     content: 'Use this edit tool to adjust your drawn area. Click it, then click on your polygon to drag corners and reshape your farm boundary.',
     targetSelector: '.leaflet-draw-edit-edit',
     position: 'right',
@@ -96,7 +96,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'drawing-actions',
-    title: 'Edit and Delete Actions 💾',
+    title: 'Edit and Delete Actions',
     content: 'Use the Edit (✏️) and Delete (🗑️) buttons to modify your drawn areas. When editing or deleting, Save (✓) and Cancel (✗) buttons will appear to confirm or undo your changes. Drawing is straightforward - just draw and it\'s automatically saved.',
     targetSelector: '.leaflet-draw-edit-edit, .leaflet-draw-edit-remove',
     position: 'right',
@@ -106,7 +106,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'analysis-tabs',
-    title: 'Analysis Options 📊',
+    title: 'Analysis Options',
     content: 'Choose what you want to analyze: Soil properties (pH, nutrients), Crop health over time (NDVI), or get Smart GPS sampling locations for field testing.',
     targetSelector: '[data-tutorial="analysis-tabs"]',
     position: 'right',
@@ -115,7 +115,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'soil-analysis',
-    title: 'Soil Analysis 🌱',
+    title: 'Soil Analysis',
     content: 'Analyze soil properties like pH, organic matter, and nutrients. Select the soil layer and depth you want to examine, then click "Analyze Soil Properties".',
     targetSelector: '[data-tutorial="soil-panel"]',
     position: 'right',
@@ -129,7 +129,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'soil-layer-selector',
-    title: 'Soil Properties 🧪',
+    title: 'Soil Properties',
     content: 'Choose which soil property to analyze: pH (acidity), organic matter, clay content, sand content, and more. Each affects your crops differently.',
     targetSelector: '[data-tutorial="soil-layer-selector"]',
     position: 'right',
@@ -138,7 +138,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'soil-depth-selector',
-    title: 'Soil Depth 📏',
+    title: 'Soil Depth',
     content: 'Select the soil depth to analyze. Different crops have roots at different depths: 0-5cm for seedlings, 15-30cm for established crops.',
     targetSelector: '[data-tutorial="soil-depth-selector"]',
     position: 'right',
@@ -147,7 +147,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'analyze-button',
-    title: 'Start Analysis 🚀',
+    title: 'Start Analysis',
     content: 'Click this button to analyze your farm area. The system will process satellite data and show you detailed soil information with colorful maps and statistics.',
     targetSelector: '[data-tutorial="analyze-soil-button"]',
     position: 'right',
@@ -156,7 +156,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'zoom-for-farmland-analysis',
-    title: 'Zoom In for Farmland Analysis 🔍',
+    title: 'Zoom In for Farmland Analysis',
     content: 'Pro tip: If you zoom in close enough (zoom level 12+), a new "Analyze All Farmland in View" button will appear in this button area. This lets you analyze multiple farmlands at once without drawing! Try zooming in slowly with your mouse wheel.',
     targetSelector: '[data-tutorial="soil-analysis-buttons"]',
     position: 'right',
@@ -165,7 +165,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'ndvi-analysis',
-    title: 'Crop Health Over Time 📈',
+    title: 'Crop Health Over Time',
     content: 'NDVI shows how healthy and green your crops are over time. Higher values mean healthier, greener crops. You can track changes throughout the growing season.',
     targetSelector: '[data-tutorial="ndvi-panel"]',
     position: 'right',
@@ -179,7 +179,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'date-selector',
-    title: 'Time Period Selection 📅',
+    title: 'Time Period Selection',
     content: 'Choose the time period to analyze. You can select a full year or a custom date range to see how your crop health changed over time.',
     targetSelector: '[data-tutorial="date-selector"]',
     position: 'right',
@@ -188,7 +188,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'ndvi-farmland-analysis',
-    title: 'NDVI Farmland View Analysis 🌾',
+    title: 'NDVI Farmland View Analysis',
     content: 'Just like with soil analysis, if you zoom in close enough, you\'ll see "Analyze All Farmlands in View" button appear here for NDVI too! This lets you compare crop health across multiple farms in your area. Remember: zoom level 12 or higher to unlock this feature.',
     targetSelector: '[data-tutorial="ndvi-analysis-buttons"]',
     position: 'right',
@@ -197,7 +197,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'sample-analysis',
-    title: 'Smart Soil Sampling 📍',
+    title: 'Smart Soil Sampling',
     content: 'Get GPS coordinates for the best spots to collect soil samples in your field. This uses scientific algorithms to find the most representative locations for accurate soil testing.',
     targetSelector: '[data-tutorial="sample-panel"]',
     position: 'right',
@@ -211,7 +211,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'sample-count-selector',
-    title: 'Number of Sampling Spots 🔢',
+    title: 'Number of Sampling Spots',
     content: 'Choose how many soil sampling locations you need. More points give more accurate results, but require more work in the field. 5-7 points work well for most small farms.',
     targetSelector: '[data-tutorial="sample-count-selector"]',
     position: 'right',
@@ -220,7 +220,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'sample-depth-selector',
-    title: 'Sampling Depth 📏',
+    title: 'Sampling Depth',
     content: 'Select how deep to collect your soil samples. Surface levels are good for seedlings, while deeper levels match the root zones of established crops.',
     targetSelector: '[data-tutorial="sample-depth-selector"]',
     position: 'right',
@@ -238,7 +238,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'generate-samples-button',
-    title: 'Generate Smart Sampling Locations 🎯',
+    title: 'Generate Smart Sampling Locations',
     content: 'Click this button to generate optimal sampling locations. The system analyzes your field\'s soil variability to find the best spots for representative samples.',
     targetSelector: '[data-tutorial="generate-samples-button"]',
     position: 'right',
@@ -247,7 +247,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'sample-results-gps',
-    title: 'GPS Coordinates & Field Navigation 🗺️',
+    title: 'GPS Coordinates & Field Navigation',
     content: 'Once generated, you\'ll see numbered circles on the map showing exact sampling locations. Download the GPS coordinates as a CSV file to load into your GPS device for easy field navigation.',
     targetSelector: '[data-tutorial="export-gps-button"]',
     position: 'right',
@@ -255,8 +255,85 @@ export const tutorialSteps: TutorialStep[] = [
     skipEnabled: true
   },
   {
+    id: 'etmap-analysis',
+    title: 'Water Usage Analysis (ET Map)',
+    content: 'Calculate evapotranspiration - the water lost from soil and plants to the atmosphere. This helps you understand your farm\'s water usage patterns using satellite data.',
+    targetSelector: '[data-tutorial="etmap-panel"]',
+    position: 'right',
+    action: 'none',
+    waitForElement: true,
+    skipEnabled: true,
+    autoAction: {
+      type: 'switchTab',
+      value: 'etmap'
+    }
+  },
+  {
+    id: 'etmap-date-range',
+    title: 'Select Date Range',
+    content: 'Choose the time period for your ET calculation. Select a start and end date - the system processes up to 31 days at a time. Note: longer date ranges take more time to process.',
+    targetSelector: '[data-tutorial="etmap-date-selector"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-calculate-button',
+    title: 'Calculate ET Map',
+    content: 'After drawing your farm area and selecting dates, click this button to start the calculation. The system will gather satellite data and process your request.',
+    targetSelector: '[data-tutorial="etmap-calculate-button"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-processing-status',
+    title: 'Processing Progress',
+    content: 'Watch the processing stages: fetching Landsat satellite imagery, PRISM climate data, and NLDAS weather data. Processing may take several minutes depending on area size and date range.',
+    targetSelector: '[data-tutorial="etmap-status"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-results',
+    title: 'View Your Results',
+    content: 'Once complete, you\'ll see an ET map overlay on your farm and detailed statistics including min, max, mean, and median evapotranspiration values. Higher values indicate more water usage.',
+    targetSelector: '[data-tutorial="etmap-statistics"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-downloads',
+    title: 'Download Your ET Map',
+    content: 'Download your results as a PNG image for presentations, or as a GeoTIFF file for analysis in GIS software like QGIS or ArcGIS.',
+    targetSelector: '[data-tutorial="etmap-downloads"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-share',
+    title: 'Share Your Results',
+    content: 'Click Share to copy a link that others can use to view your ET Map results. Great for sharing with agronomists or farm consultants.',
+    targetSelector: '[data-tutorial="etmap-share-button"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
+    id: 'etmap-history',
+    title: 'Request History',
+    content: 'Your previous ET Map calculations are saved here. Click any entry to reload the geometry, dates, and results from that calculation.',
+    targetSelector: '[data-tutorial="etmap-history"]',
+    position: 'right',
+    action: 'none',
+    skipEnabled: true
+  },
+  {
     id: 'location-button',
-    title: 'Find Your Location 📍',
+    title: 'Find Your Location',
     content: 'Click this button to automatically center the map on your current location. Make sure to allow location access when prompted.',
     targetSelector: '[data-tutorial="location-button"]',
     position: 'right',
@@ -265,7 +342,7 @@ export const tutorialSteps: TutorialStep[] = [
   },
   {
     id: 'results-interpretation',
-    title: 'Understanding Your Results 📋',
+    title: 'Understanding Your Results',
     content: 'When analysis is complete, you\'ll see colorful maps, charts, and statistics. Green areas are healthy, red areas may need attention. You can export PDF reports to share.',
     targetSelector: '.main-container',
     position: 'center',

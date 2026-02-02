@@ -213,9 +213,9 @@ function LeafletMapComponent() {
     const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
-      keepBuffer: 6,
+      keepBuffer: 4,
       updateWhenIdle: true,
-      updateWhenZooming: true, // Allow updates during zoom for smoother experience
+      updateWhenZooming: false,
       zoomOffset: 0,
       tileSize: 256,
       crossOrigin: true,
@@ -348,9 +348,9 @@ function LeafletMapComponent() {
       // Only update if meaningfully different
       const needsUpdate = (
         !lastAppliedState.current.center ||
-        Math.abs(lastAppliedState.current.center[0] - newCenter[0]) > 0.0001 ||
-        Math.abs(lastAppliedState.current.center[1] - newCenter[1]) > 0.0001 ||
-        Math.abs((lastAppliedState.current.zoom || 0) - newZoom) > 0.01
+        Math.abs(lastAppliedState.current.center[0] - newCenter[0]) > 0.001 ||
+        Math.abs(lastAppliedState.current.center[1] - newCenter[1]) > 0.001 ||
+        Math.abs((lastAppliedState.current.zoom || 0) - newZoom) > 0.1
       )
 
       if (needsUpdate) {
@@ -486,14 +486,13 @@ function LeafletMapComponent() {
     let newTileLayer: L.TileLayer
 
     if (resolvedTheme === 'dark') {
-      // Use CartoDB Dark Matter tiles for dark theme
-      newTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors, © CartoDB',
-        maxZoom: 19,
-        subdomains: 'abcd',
-        keepBuffer: 6,
+      // Use Esri Dark Gray Canvas tiles for better boundary contrast.
+      newTileLayer = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri',
+        maxZoom: 16,
+        keepBuffer: 4,
         updateWhenIdle: true,
-        updateWhenZooming: true,
+        updateWhenZooming: false,
         crossOrigin: true,
       })
     } else {
@@ -501,9 +500,9 @@ function LeafletMapComponent() {
       newTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
-        keepBuffer: 6,
+        keepBuffer: 4,
         updateWhenIdle: true,
-        updateWhenZooming: true,
+        updateWhenZooming: false,
         crossOrigin: true,
       })
     }
@@ -559,9 +558,9 @@ function LeafletMapComponent() {
         opacity: 0.7,
         attribution: 'FutureFarmNow',
         pane: 'vectorPane',
-        keepBuffer: 4,
+        keepBuffer: 2,
         updateWhenIdle: true,
-        updateWhenZooming: true,
+        updateWhenZooming: false,
         crossOrigin: true,
       })
 
