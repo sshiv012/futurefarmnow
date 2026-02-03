@@ -1,0 +1,731 @@
+openapi: 3.0.3
+info:
+  title: FutureFarmNow API
+  description: |-
+    This is the API documentation for the FutureFarmNow project. It provides access to geospatial data processing and visualization, including farmland vector data, soil properties, and NDVI time-series data.
+    The API is split between a Java/Scala backend for heavy-duty processing and a Python/WSGI backend for specific analytical tasks.
+  version: 0.3-RC1
+servers:
+  - url: https://raptor.cs.ucr.edu/futurefarmnow-backend-0.3-RC1
+    description: Production Server
+
+paths:
+  /vectors.json:
+    get:
+      summary: List vector products
+      description: Lists all the vector datasets available on the server.
+      tags:
+        - Vector Data
+      responses:
+        '200':
+          description: A JSON array of available vector datasets.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vectors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VectorInfo'
+              example:
+                vectors:
+                  - id: "farmland"
+                    title: "California Farmlands"
+                    description: "All farmlands in California"
+
+  /vectors/{id}.geojson:
+    get:
+      summary: Retrieve vector dataset
+      description: Returns a vector dataset as a GeoJSON FeatureCollection. Can be filtered by a bounding box.
+      tags:
+        - Vector Data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the vector dataset to retrieve.
+          schema:
+            type: string
+        - name: minx
+          in: query
+          description: West edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: miny
+          in: query
+          description: South edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxx
+          in: query
+          description: East edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxy
+          in: query
+          description: North edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+      responses:
+        '200':
+          description: A GeoJSON FeatureCollection representing the vector data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoJSONFeatureCollection'
+
+  /vectors/{id}/tile-{z}-{x}-{y}.png:
+    get:
+      summary: Retrieve vector dataset tile
+      description: Retrieves a tile visualization for a vector dataset.
+      tags:
+        - Vector Data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the vector dataset.
+          schema:
+            type: string
+        - name: z
+          in: path
+          required: true
+          description: The zoom level.
+          schema:
+            type: integer
+        - name: x
+          in: path
+          required: true
+          description: The x-coordinate of the tile.
+          schema:
+            type: integer
+        - name: y
+          in: path
+          required: true
+          description: The y-coordinate of the tile.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: A PNG image of the rendered map tile.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /soil/singlepolygon.json:
+    post:
+      summary: Get soil statistics for a single polygon
+      description: Computes and returns soil statistics for a single geometry provided as a GeoJSON object in the request body.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - $ref: '#/components/parameters/SoilLayer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: Soil statistics for the given polygon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoilStatsResponse'
+    get:
+      summary: Get soil statistics for a single polygon (GET)
+      description: Computes and returns soil statistics for a single geometry provided as a GeoJSON object in the request body. GET is supported for clients that cannot send a body with GET requests.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - $ref: '#/components/parameters/SoilLayer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: Soil statistics for the given polygon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoilStatsResponse'
+
+  /soil/{id}.json:
+    get:
+      summary: Get soil statistics for all farmlands in a region
+      description: Get computed soil statistics for a selected vector product, optionally filtered by a bounding box.
+      tags:
+        - Soil Data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the vector dataset.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/SoilDepth'
+        - $ref: '#/components/parameters/SoilLayer'
+        - name: minx
+          in: query
+          description: West edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: miny
+          in: query
+          description: South edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxx
+          in: query
+          description: East edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxy
+          in: query
+          description: North edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+      responses:
+        '200':
+          description: A JSON object containing the query and an array of results.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: object
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        objectid:
+                          type: string
+                        value:
+                          type: number
+
+  /soil/image.png:
+    post:
+      summary: Get soil image for a region
+      description: Generates and returns a PNG image of soil statistics for a region defined by a GeoJSON geometry.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - $ref: '#/components/parameters/SoilLayer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image of the soil statistics.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+    get:
+      summary: Get soil image for a region (GET)
+      description: Generates and returns a PNG image of soil statistics for a region defined by a GeoJSON geometry. GET is supported for compatibility.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - $ref: '#/components/parameters/SoilLayer'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image of the soil statistics.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  /soil/sample.json:
+    post:
+      summary: Request soil sample points
+      description: Request a set of points to sample a field given as a polygon, based on soil properties.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - name: layer
+          in: query
+          required: true
+          description: Soil parameter(s) to consider. Can be repeated for multiple layers.
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SoilLayerEnum'
+          style: form
+          explode: true
+        - name: num_points
+          in: query
+          required: true
+          description: The number of sample points to return.
+          schema:
+            type: integer
+            enum: [5, 7, 10, 12]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A JSON object containing the sample points and detailed statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoilSampleResponse'
+    get:
+      summary: Request soil sample points (GET)
+      description: Request a set of points to sample a field given as a polygon, based on soil properties. GET is supported for compatibility.
+      tags:
+        - Soil Data
+      parameters:
+        - $ref: '#/components/parameters/SoilDepth'
+        - name: layer
+          in: query
+          required: true
+          description: Soil parameter(s) to consider. Can be repeated for multiple layers.
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SoilLayerEnum'
+          style: form
+          explode: true
+        - name: num_points
+          in: query
+          required: true
+          description: The number of sample points to return.
+          schema:
+            type: integer
+            enum: [5, 7, 10, 12]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A JSON object containing the sample points and detailed statistics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoilSampleResponse'
+
+  /ndvi/singlepolygon.json:
+    post:
+      summary: Get NDVI time series for a single polygon
+      description: Get NDVI time series for a single geometry defined by GeoJSON for a given date range.
+      tags:
+        - NDVI Data
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: NDVI time series data for the polygon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NDVISinglePolygonResponse'
+    get:
+      summary: Get NDVI time series for a single polygon (GET)
+      description: Get NDVI time series for a single geometry defined by GeoJSON for a given date range. GET is supported for compatibility.
+      tags:
+        - NDVI Data
+      parameters:
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: NDVI time series data for the polygon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NDVISinglePolygonResponse'
+
+  /ndvi/{id}.json:
+    get:
+      summary: Get NDVI for all farmlands in a region
+      description: Get NDVI time series for selected vector products in a given region and date range.
+      tags:
+        - NDVI Data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the vector dataset.
+          schema:
+            type: string
+        - $ref: '#/components/parameters/FromDate'
+        - $ref: '#/components/parameters/ToDate'
+        - name: minx
+          in: query
+          description: West edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: miny
+          in: query
+          description: South edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxx
+          in: query
+          description: East edge longitude for the bounding box.
+          schema:
+            type: number
+            format: double
+        - name: maxy
+          in: query
+          description: North edge latitude for the bounding box.
+          schema:
+            type: number
+            format: double
+      responses:
+        '200':
+          description: An array of NDVI time series for each feature in the region.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NDVIMultiPolygonResponse'
+
+  /ndvi/image.png:
+    post:
+      summary: Get NDVI image for a single geometry
+      description: Generates and returns a PNG image with NDVI visualization for a specific date and geometry using the gray-red-orange-yellow-green color scale.
+      tags:
+        - NDVI Data
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Specific date for NDVI visualization.
+          schema:
+            type: string
+            format: date
+            example: "2024-01-15"
+        - name: source
+          in: query
+          required: false
+          description: Data source for NDVI data.
+          schema:
+            type: string
+            enum: [ndvi, landsat]
+            default: ndvi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image with NDVI visualization using color-coded scale.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No data found for the specified date.
+        '500':
+          description: Error generating NDVI image.
+    get:
+      summary: Get NDVI image for a single geometry (GET)
+      description: Generates and returns a PNG image with NDVI visualization for a specific date and geometry. GET is supported for compatibility.
+      tags:
+        - NDVI Data
+      parameters:
+        - name: date
+          in: query
+          required: true
+          description: Specific date for NDVI visualization.
+          schema:
+            type: string
+            format: date
+            example: "2024-01-15"
+        - name: source
+          in: query
+          required: false
+          description: Data source for NDVI data.
+          schema:
+            type: string
+            enum: [ndvi, landsat]
+            default: ndvi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+      responses:
+        '200':
+          description: A PNG image with NDVI visualization using color-coded scale.
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No data found for the specified date.
+        '500':
+          description: Error generating NDVI image.
+
+components:
+  schemas:
+    VectorInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+
+    GeoJSONGeometry:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection]
+        coordinates:
+          type: array
+          items: {}
+      required:
+        - type
+        - coordinates
+
+    GeoJSONFeature:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Feature]
+        geometry:
+          $ref: '#/components/schemas/GeoJSONGeometry'
+        properties:
+          type: object
+      required:
+        - type
+        - geometry
+        - properties
+
+    GeoJSONFeatureCollection:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [FeatureCollection]
+        features:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeoJSONFeature'
+      required:
+        - type
+        - features
+
+    SoilLayerEnum:
+      type: string
+      enum: [alpha, bd, clay, hb, ksat, lambda, n, om, ph, sand, silt, theta_r, theta_s]
+
+    Statistics:
+      type: object
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+        sum:
+          type: number
+        mean:
+          type: number
+        median:
+          type: number
+        stddev:
+          type: number
+        count:
+          type: integer
+        lowerquart:
+          type: number
+        upperquart:
+          type: number
+
+    SoilStatsResponse:
+      type: object
+      properties:
+        query:
+          type: object
+        results:
+          $ref: '#/components/schemas/Statistics'
+
+    SoilSampleResponse:
+      type: object
+      properties:
+        query:
+          $ref: '#/components/schemas/GeoJSONGeometry'
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              x:
+                type: number
+                format: double
+              y:
+                type: number
+                format: double
+              id:
+                type: integer
+        statistics:
+          type: object
+          properties:
+            layers:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  actual:
+                    $ref: '#/components/schemas/Statistics'
+                  sample:
+                    $ref: '#/components/schemas/Statistics'
+
+    NDVISinglePolygonResponse:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+            geometry:
+              $ref: '#/components/schemas/GeoJSONGeometry'
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              mean:
+                type: number
+                format: double
+
+    NDVIMultiPolygonResponse:
+      type: object
+      properties:
+        query:
+          type: object
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              objectid:
+                type: string
+              results:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                      format: date
+                    mean:
+                      type: number
+                      format: double
+
+  parameters:
+    SoilDepth:
+      name: soildepth
+      in: query
+      required: true
+      description: "Soil depth on which to run statistics. Provided as a range 'from-to'. Accepted values for from/to are {0, 5, 15, 30, 60, 100, 200} and 'from' must be less than 'to'."
+      schema:
+        type: string
+        pattern: '^\d+-\d+$'
+      example: "0-5"
+    SoilLayer:
+      name: layer
+      in: query
+      required: true
+      description: The soil parameter to consider.
+      schema:
+        $ref: '#/components/schemas/SoilLayerEnum'
+    FromDate:
+      name: from
+      in: query
+      required: true
+      description: Start date of the search.
+      schema:
+        type: string
+        format: date
+        example: "2023-01-01"
+    ToDate:
+      name: to
+      in: query
+      required: true
+      description: End date of the search.
+      schema:
+        type: string
+        format: date
+        example: "2023-01-31"
+
+tags:
+  - name: Vector Data
+    description: APIs for retrieving and visualizing vector datasets.
+  - name: Soil Data
+    description: APIs for querying soil properties, statistics, and sample points.
+  - name: NDVI Data
+    description: APIs for retrieving Normalized Difference Vegetation Index time series data.

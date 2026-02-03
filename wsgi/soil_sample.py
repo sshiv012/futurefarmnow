@@ -51,7 +51,7 @@ import os
 import sys
 import tempfile
 from io import StringIO
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
 from shapely.geometry import shape
 from extract_points import *
 from choose_points import *
@@ -121,6 +121,7 @@ def process_request(query_params, query_geometry):
     soil_depth = query_params.get("soildepth")
     layers = query_params.getlist("layer")
     num_points = int(query_params.get("num_points"))
+    print(f"[SAMPLE_DEBUG] process_request: soildepth={soil_depth}, layers={layers}, num_points={num_points}", file=sys.stderr)
 
     # Calculate layer values at each point
     df = output_from_attr(
@@ -130,9 +131,11 @@ def process_request(query_params, query_geometry):
         attribute_list=layers,
         num_samples=num_points
     )
+    print(f"[SAMPLE_DEBUG] After output_from_attr: df shape={df.shape}, columns={list(df.columns)}", file=sys.stderr)
 
     # Choose what points to use
     sample_df = select_points(df, num_samples=num_points, epsg_code=4326)
+    print(f"[SAMPLE_DEBUG] After select_points: sample_df shape={sample_df.shape}, requested={num_points}, actual={len(sample_df)}", file=sys.stderr)
 
     # Calculate statistics for the layers
     statistics = calculate_statistics(sample_df, df)
@@ -145,12 +148,26 @@ def process_request(query_params, query_geometry):
             "layers": statistics
         }
     }
+    print(f"[SAMPLE_DEBUG] Response: Returning {len(response_data['results'])} sample points", file=sys.stderr)
 
-    return jsonify(response_data)
+    response = make_response(jsonify(response_data))
+    # Add CORS headers
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
 
 # Define the main endpoint
-@soil_sample_bp.route('/soil/sample.json', methods=['POST', 'GET'])
+@soil_sample_bp.route('/soil/sample.json', methods=['POST', 'GET', 'OPTIONS'])
 def soil_sample():
+    # Handle preflight OPTIONS request for CORS
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    
     # Extract query parameters from the URL
     query_params = request.args  # Automatically handles QUERY_STRING
     try:
@@ -167,12 +184,22 @@ def soil_sample():
     except (ValueError, json.JSONDecodeError) as e:
         import traceback
         traceback.print_exc()
-        return jsonify({
+        response = make_response(jsonify({
             "error": "Invalid JSON payload.",
             "details": str(e),
             "stack_trace": traceback.format_exc()
-        }), 400
+        }), 400)
+        # Add CORS headers to error response
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        response = make_response(jsonify({"error": str(e)}), 500)
+        # Add CORS headers to error response
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response

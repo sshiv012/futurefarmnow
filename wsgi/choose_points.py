@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import sys
 
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, PowerTransformer
 from sklearn.decomposition import PCA
@@ -171,6 +172,7 @@ def iter_combinations(num_combs=np.nan, filtered_distances = None, filtered_indi
 #scalar_scheme can be: StandardScaler, RobustScaler, PowerTransformer
 #outlier tecnhique can be: IQR Thresholding, Mahalanobis Distance, Elliptic Envelope
 def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'StandardScaler', outlier_technique = 'IQR Thresholding',weight = 0.5, Morgans = False, output_name = 'results'):
+    print(f"[SAMPLE_DEBUG] select_points ENTRY: Requested num_samples={num_samples}, input df shape={df.shape}", file=sys.stderr)
     Sample_IDx_FID = list(range(len(df)))
     lat = df.columns[0]
     lon = df.columns[1]
@@ -209,7 +211,8 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
 
     pca = PCA(n_components=pca_selection)
     PCs = pca.fit_transform(X_scaled)
-    
+    print(f"[SAMPLE_DEBUG] After PCA: Total points available={PCs.shape[0]}", file=sys.stderr)
+
     rows_to_keep = np.ones(PCs.shape[0], dtype=bool)
     filtered_Pcs = PCs[:,:]
     preferedPCs = None
@@ -235,9 +238,11 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
         rows_to_keep = elliptic_envelope_outliers(PCs, threshold)
     filtered_Pcs = PCs[rows_to_keep] # Convert filtered_data list to a NumPy array
     outliers_Pcs = PCs[~rows_to_keep] # Convert filtered_data list to a NumPy array
+    print(f"[SAMPLE_DEBUG] After outlier filtering ({outlier_technique}): Kept={filtered_Pcs.shape[0]}, Removed={outliers_Pcs.shape[0]}", file=sys.stderr)
         
     design, _ = generate_design(filtered_Pcs, num_samples, whitten)
-    
+    print(f"[SAMPLE_DEBUG] After generate_design: design points={len(design)}, requested={num_samples}", file=sys.stderr)
+
     # BUG FIX: Ensure design has exactly num_samples points
     if len(design) > num_samples:
         # Select the most central points if we have too many
@@ -246,9 +251,11 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
         centrality = np.sum(dist_matrix, axis=1)
         most_central_indices = np.argsort(centrality)[:num_samples]
         design = design[most_central_indices]
+        print(f"[SAMPLE_DEBUG] Design adjustment: Reduced from {len(design)} to {num_samples} (selected most central)", file=sys.stderr)
     elif len(design) < num_samples:
         # Adjust num_samples if we don't have enough design points
         print(f"\x1b[33mWarning: Adjusting num_samples from {num_samples} to {len(design)} due to design constraints\x1b[0m")
+        print(f"[SAMPLE_DEBUG] Design adjustment: REDUCED num_samples from {num_samples} to {len(design)} (design constraints)", file=sys.stderr)
         num_samples = len(design)
 
     Geo_space_X = df.loc[rows_to_keep, lat]
@@ -275,12 +282,21 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
     tree = KDTree(Var_space_XY)
     distances, indices = tree.query(design, k=NNearest_neighbour)
     ind_ko = np.unique(indices)
+
+    # Log KDTree query results with actual distances
+    print(f"[SAMPLE_DEBUG] KDTree query (var_max={var_max}):", file=sys.stderr)
+    for i in range(len(design)):
+        nearest_dists = distances[i]
+        min_dist = np.min(nearest_dists)
+        candidates_within = np.sum(nearest_dists < var_max)
+        print(f"[SAMPLE_DEBUG]   Design point {i}: min_dist={min_dist:.4f}, nearest_distances={nearest_dists}, candidates_within_var_max={candidates_within}", file=sys.stderr)
+
     valid_indices = distances < var_max
     filtered_distances = [distances[i][valid_i] for i, valid_i in enumerate(valid_indices)]
     filtered_indices = [indices[i][valid_i] for i, valid_i in enumerate(valid_indices)]
     ind_ko = np.unique(indices[valid_indices])
     avg = np.average(distances, axis=1)
-    
+
     print(filtered_indices)
     
     if (np.min(distances, axis=1) > var_max).any():
@@ -318,6 +334,15 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
     # Optionally, convert each list of indices to a NumPy array
     assigned_indices = [np.array(lst) for lst in assigned_indices]
     filtered_indices = assigned_indices
+    empty_design_points = [i for i, candidates in enumerate(filtered_indices) if len(candidates) == 0]
+    print(f"[SAMPLE_DEBUG] After candidate assignment: {len(empty_design_points)} design points have NO candidates. Empty indices: {empty_design_points}", file=sys.stderr)
+    for i, candidates in enumerate(filtered_indices[:5]):  # Log first 5 for brevity
+        if len(candidates) > 0:
+            # Calculate actual distances for assigned candidates
+            candidate_distances = [np.linalg.norm(Var_space_XY[c] - design[i]) for c in candidates]
+            print(f"[SAMPLE_DEBUG] Design point {i}: {len(candidates)} candidates, distances={[f'{d:.4f}' for d in candidate_distances]}", file=sys.stderr)
+        else:
+            print(f"[SAMPLE_DEBUG] Design point {i}: 0 candidates (all beyond var_max={var_max})", file=sys.stderr)
     
     mat_dist = distance_matrix(Geo_space_XY,Geo_space_XY)
 
@@ -371,19 +396,27 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
     for combo in all_combinations:
         if len(set(combo)) == num_samples:  # Ensure all points are unique
             distinct_combinations.append(combo)
-    
+
+    print(f"[SAMPLE_DEBUG] Distinct combinations: Found {len(distinct_combinations)} valid combinations with {num_samples} unique points", file=sys.stderr)
+
     # If no valid combinations found, use fallback
     if not distinct_combinations:
+        print(f"[SAMPLE_DEBUG] No distinct combinations found, using FALLBACK logic", file=sys.stderr)
         print("\x1b[33mWarning: No distinct combinations found, using best available candidates\x1b[0m")
         final_result = []
         used_indices = set()
-        for candidates in candidate_sets:
+        for i, candidates in enumerate(candidate_sets):
+            found = False
             for idx in candidates:
                 if idx not in used_indices:
                     final_result.append(idx)
                     used_indices.add(idx)
+                    found = True
                     break
+            if not found:
+                print(f"[SAMPLE_DEBUG] FALLBACK: Design point {i} has no unique candidates (all already used or empty)", file=sys.stderr)
         final_result = np.array(final_result[:num_samples])
+        print(f"[SAMPLE_DEBUG] FALLBACK result: Selected {len(final_result)} points out of {num_samples} requested", file=sys.stderr)
     else:
         # Score combinations to find the best one
         final_score = float('-inf')
@@ -415,9 +448,11 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
     
     # Ensure we have exactly num_samples points
     if len(final_result) > num_samples:
+        print(f"[SAMPLE_DEBUG] Final result truncation: {len(final_result)} -> {num_samples}", file=sys.stderr)
         final_result = final_result[:num_samples]
     elif len(final_result) < num_samples:
         print(f"\x1b[33mWarning: Only {len(final_result)} points selected instead of {num_samples}\x1b[0m")
+        print(f"[SAMPLE_DEBUG] FINAL RESULT SHORTAGE: Only {len(final_result)} points selected instead of {num_samples}", file=sys.stderr)
     
     #Morgans:
     if Morgans:
@@ -471,7 +506,18 @@ def select_points(df, num_samples=10, epsg_code = 32618, scalar_scheme = 'Standa
             if score > final_score:
                 final_score = score
                 final_result = idx
-                
+
+    # Log final selection variance distances
+    print(f"[SAMPLE_DEBUG] Final selection variance distances:", file=sys.stderr)
+    for i, point_idx in enumerate(final_result):
+        # Find which design point this was intended for
+        for design_idx in range(len(design)):
+            if design_idx < len(filtered_indices) and point_idx in filtered_indices[design_idx]:
+                actual_dist = np.linalg.norm(Var_space_XY[point_idx] - design[design_idx])
+                print(f"[SAMPLE_DEBUG]   Point {point_idx} → Design {design_idx}: distance={actual_dist:.4f} (var_max was {var_max})", file=sys.stderr)
+                break
+
     ndf = pd.DataFrame(Geo_space_XY[final_result].reshape(-1, 2), columns=[lat, lon])
     ndf.to_csv(f"{output_name}.csv", index=None)
+    print(f"[SAMPLE_DEBUG] select_points EXIT: Returning {len(ndf)} points (requested was {num_samples})", file=sys.stderr)
     return ndf
