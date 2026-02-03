@@ -42,16 +42,20 @@ Usage:
 """
 
 from flask import Flask, send_from_directory, jsonify
+from flask_cors import CORS
 from soil_stats import soil_stats_bp
 from soil_sample import soil_sample_bp
 from ndvi_timeseries import ndvi_timeseries_bp
+from app.et_map import etrawdata_bp
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": "*"}})
 
 # Register blueprints
 app.register_blueprint(soil_stats_bp)
 app.register_blueprint(soil_sample_bp)
 app.register_blueprint(ndvi_timeseries_bp)
+app.register_blueprint(etrawdata_bp)
 
 # Global error handler
 @app.errorhandler(Exception)
@@ -77,4 +81,4 @@ if app.debug:
         return send_from_directory(static_folder, filename)
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5200, debug=True)
